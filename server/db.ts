@@ -314,3 +314,186 @@ export async function getUserStats(userId: number): Promise<{
 
   return { totalPlaces, totalLists, visitedCount, wantToGoCount };
 }
+
+
+// ==================== Advanced Search Queries ====================
+
+export interface AdvancedSearchFilters {
+  // エリア・距離
+  location?: { lat: number; lng: number };
+  distanceRadius?: number | null;
+  prefecture?: string;
+
+  // ジャンル
+  genreParent?: string;
+  genreChild?: string;
+
+  // 予算
+  budgetType?: 'lunch' | 'dinner';
+  budgetBand?: string;
+
+  // 営業
+  openNow?: boolean;
+
+  // 特徴
+  features?: string[];
+
+  // ステータス
+  status?: 'none' | 'want_to_go' | 'visited';
+
+  // 並び替え
+  sort?: 'recommended' | 'distance' | 'rating' | 'reviews' | 'new';
+
+  // ページネーション
+  page?: number;
+  limit?: number;
+}
+
+export interface PlaceWithDistance extends Place {
+  distance?: number;
+}
+
+export interface AdvancedSearchResult {
+  places: PlaceWithDistance[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+// Haversine formula to calculate distance between two points
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // Earth's radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+export async function advancedSearchPlaces(
+  userId: number,
+  filters: AdvancedSearchFilters
+): Promise<AdvancedSearchResult> {
+  const db = await getDb();
+  if (!db) {
+    return { places: [], total: 0, page: 1, limit: 20, hasMore: false };
+  }
+
+  const page = filters.page || 1;
+  const limit = filters.limit || 20;
+  const offset = (page - 1) * limit;
+
+  // Build conditions
+  let conditions = [eq(places.userId, userId)];
+
+  // Genre filter
+  if (filters.genreParent) {
+    conditions.push(eq(places.genreParent, filters.genreParent));
+  }
+  if (filters.genreChild) {
+    conditions.push(eq(places.genreChild, filters.genreChild));
+  }
+
+  // Budget filter
+  if (filters.budgetBand) {
+    if (filters.budgetType === 'lunch') {
+      conditions.push(eq(places.budgetLunch, filters.budgetBand));
+    } else if (filters.budgetType === 'dinner') {
+      conditions.push(eq(places.budgetDinner, filters.budgetBand));
+    }
+  }
+
+  // Status filter
+  if (filters.status) {
+    conditions.push(eq(places.status, filters.status));
+  }
+
+  // Prefecture filter (check in address)
+  if (filters.prefecture) {
+    conditions.push(like(places.address, `%${filters.prefecture}%`));
+  }
+
+  // Get all matching places
+  let results = await db.select().from(places).where(and(...conditions));
+
+  // Filter by features (in-memory, since features is JSON)
+  if (filters.features && filters.features.length > 0) {
+    results = results.filter(place => {
+      if (!place.features) return false;
+      return filters.features!.some(f => place.features?.includes(f));
+    });
+  }
+
+  // Calculate distances and filter by radius
+  let placesWithDistance: PlaceWithDistance[] = results.map(place => {
+    let distance: number | undefined;
+    if (filters.location && place.latitude && place.longitude) {
+      distance = calculateDistance(
+        filters.location.lat,
+        filters.location.lng,
+        parseFloat(place.latitude),
+        parseFloat(place.longitude)
+      );
+    }
+    return { ...place, distance };
+  });
+
+  // Filter by distance radius
+  if (filters.location && filters.distanceRadius) {
+    placesWithDistance = placesWithDistance.filter(place => {
+      if (place.distance === undefined) return true;
+      return place.distance <= filters.distanceRadius!;
+    });
+  }
+
+  // Sort
+  switch (filters.sort) {
+    case 'distance':
+      placesWithDistance.sort((a, b) => {
+        if (a.distance === undefined) return 1;
+        if (b.distance === undefined) return -1;
+        return a.distance - b.distance;
+      });
+      break;
+    case 'rating':
+      placesWithDistance.sort((a, b) => {
+        const ratingA = a.rating ? parseFloat(a.rating) : 0;
+        const ratingB = b.rating ? parseFloat(b.rating) : 0;
+        return ratingB - ratingA;
+      });
+      break;
+    case 'reviews':
+      placesWithDistance.sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0));
+      break;
+    case 'new':
+      placesWithDistance.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      break;
+    case 'recommended':
+    default:
+      // Default: mix of rating and recency
+      placesWithDistance.sort((a, b) => {
+        const ratingA = a.rating ? parseFloat(a.rating) : 0;
+        const ratingB = b.rating ? parseFloat(b.rating) : 0;
+        const scoreA = ratingA * 0.7 + (a.userRating || 0) * 0.3;
+        const scoreB = ratingB * 0.7 + (b.userRating || 0) * 0.3;
+        return scoreB - scoreA;
+      });
+      break;
+  }
+
+  const total = placesWithDistance.length;
+  const paginatedResults = placesWithDistance.slice(offset, offset + limit);
+
+  return {
+    places: paginatedResults,
+    total,
+    page,
+    limit,
+    hasMore: offset + limit < total,
+  };
+}

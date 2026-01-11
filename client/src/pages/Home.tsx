@@ -7,7 +7,7 @@ import { MapView } from "@/components/Map";
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, Plus, List, MapPin, Star, ExternalLink, Loader2, UtensilsCrossed, Navigation, Heart, Check, Bookmark } from "lucide-react";
+import { Search, Plus, List, MapPin, Star, ExternalLink, Loader2, UtensilsCrossed, Navigation, Heart, Check, Bookmark, Filter } from "lucide-react";
 import { toast } from "sonner";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 import PlaceEditDialog from "@/components/PlaceEditDialog";
@@ -334,6 +334,12 @@ export default function Home() {
 
         {/* Navigation */}
         <nav className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/filter">
+              <Filter className="w-4 h-4 mr-1" />
+              <span className="hidden sm:inline">絞り込み</span>
+            </Link>
+          </Button>
           <Button variant="ghost" size="sm" asChild>
             <Link href="/lists">
               <List className="w-4 h-4 mr-1" />

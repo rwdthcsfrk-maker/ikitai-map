@@ -9,6 +9,7 @@ import Lists from "./pages/Lists";
 import ListDetail from "./pages/ListDetail";
 import AddPlace from "./pages/AddPlace";
 import Search from "./pages/Search";
+import FilterSearch from "./pages/FilterSearch";
 
 function Router() {
   return (
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/lists/:id" component={ListDetail} />
       <Route path="/add" component={AddPlace} />
       <Route path="/search" component={Search} />
+      <Route path="/filter" component={FilterSearch} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

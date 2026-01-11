@@ -5,6 +5,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { invokeLLM } from "./_core/llm";
 import * as db from "./db";
+import { PARENT_GENRES, CHILD_GENRES, BUDGET_BANDS, DISTANCE_OPTIONS, FEATURE_OPTIONS, SORT_OPTIONS, PREFECTURES } from "@shared/masters";
 
 // ==================== Place Router ====================
 const placeRouter = router({
@@ -360,6 +361,45 @@ const userRouter = router({
   }),
 });
 
+// ==================== Master Router ====================
+const masterRouter = router({
+  genres: publicProcedure.query(() => ({
+    parents: PARENT_GENRES,
+    children: CHILD_GENRES,
+  })),
+  budgets: publicProcedure.query(() => BUDGET_BANDS),
+  distances: publicProcedure.query(() => DISTANCE_OPTIONS),
+  features: publicProcedure.query(() => FEATURE_OPTIONS),
+  sortOptions: publicProcedure.query(() => SORT_OPTIONS),
+  prefectures: publicProcedure.query(() => PREFECTURES),
+});
+
+// ==================== Advanced Search Router ====================
+const advancedSearchRouter = router({
+  filter: protectedProcedure
+    .input(z.object({
+      location: z.object({
+        lat: z.number(),
+        lng: z.number(),
+      }).optional(),
+      distanceRadius: z.number().nullable().optional(),
+      prefecture: z.string().optional(),
+      genreParent: z.string().optional(),
+      genreChild: z.string().optional(),
+      budgetType: z.enum(['lunch', 'dinner']).optional(),
+      budgetBand: z.string().optional(),
+      openNow: z.boolean().optional(),
+      features: z.array(z.string()).optional(),
+      status: z.enum(['none', 'want_to_go', 'visited']).optional(),
+      sort: z.enum(['recommended', 'distance', 'rating', 'reviews', 'new']).optional(),
+      page: z.number().optional(),
+      limit: z.number().optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      return db.advancedSearchPlaces(ctx.user.id, input);
+    }),
+});
+
 // ==================== Main Router ====================
 export const appRouter = router({
   system: systemRouter,
@@ -375,6 +415,8 @@ export const appRouter = router({
   place: placeRouter,
   list: listRouter,
   ai: aiRouter,
+  master: masterRouter,
+  advancedSearch: advancedSearchRouter,
 });
 
 export type AppRouter = typeof appRouter;
