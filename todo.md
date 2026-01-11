@@ -34,3 +34,15 @@
 - [x] 店舗評価機能（5段階評価）
 - [x] 評価・ステータスのDB保存
 - [x] ステータス別フィルタリング
+
+
+## Expo GO対応（v3）
+- [x] Expoプロジェクト初期化
+- [x] React Native用マップ画面実装
+- [x] React Native用リスト画面実装
+- [x] React Native用検索画面実装
+- [x] React Native用店舗追加画面実装
+- [x] tRPC API連携設定
+- [x] OAuth認証対応（デモモード）
+- [x] 現在地取得機能（expo-location）
+- [x] Expo GO接続設定ドキュメント作成
