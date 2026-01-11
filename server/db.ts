@@ -134,7 +134,12 @@ export async function deletePlace(id: number): Promise<void> {
   await db.delete(places).where(eq(places.id, id));
 }
 
-export async function searchPlaces(userId: number, query: string, features?: string[]): Promise<Place[]> {
+export async function searchPlaces(
+  userId: number,
+  query: string,
+  features?: string[],
+  status?: "none" | "want_to_go" | "visited"
+): Promise<Place[]> {
   const db = await getDb();
   if (!db) return [];
   
@@ -149,6 +154,10 @@ export async function searchPlaces(userId: number, query: string, features?: str
         like(places.summary, `%${query}%`)
       )!
     );
+  }
+
+  if (status) {
+    conditions.push(eq(places.status, status));
   }
   
   const results = await db.select().from(places).where(and(...conditions));

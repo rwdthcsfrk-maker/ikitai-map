@@ -67,6 +67,47 @@ const placeRouter = router({
       return db.updatePlace(id, data);
     }),
 
+  // Update place status (want_to_go, visited, none)
+  updateStatus: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      status: z.enum(["none", "want_to_go", "visited"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const place = await db.getPlaceById(input.id);
+      if (!place || place.userId !== ctx.user.id) {
+        throw new Error("Place not found or unauthorized");
+      }
+      const updateData: { status: "none" | "want_to_go" | "visited"; visitedAt?: Date | null } = {
+        status: input.status,
+      };
+      // Set visitedAt when marking as visited
+      if (input.status === "visited") {
+        updateData.visitedAt = new Date();
+      } else {
+        updateData.visitedAt = null;
+      }
+      return db.updatePlace(input.id, updateData);
+    }),
+
+  // Update user rating and note
+  updateRating: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      userRating: z.number().min(1).max(5).nullable(),
+      userNote: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const place = await db.getPlaceById(input.id);
+      if (!place || place.userId !== ctx.user.id) {
+        throw new Error("Place not found or unauthorized");
+      }
+      return db.updatePlace(input.id, {
+        userRating: input.userRating,
+        userNote: input.userNote,
+      });
+    }),
+
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
@@ -82,9 +123,10 @@ const placeRouter = router({
     .input(z.object({
       query: z.string().optional(),
       features: z.array(z.string()).optional(),
+      status: z.enum(["none", "want_to_go", "visited"]).optional(),
     }))
     .query(async ({ ctx, input }) => {
-      return db.searchPlaces(ctx.user.id, input.query || "", input.features);
+      return db.searchPlaces(ctx.user.id, input.query || "", input.features, input.status);
     }),
 
   getListsForPlace: protectedProcedure

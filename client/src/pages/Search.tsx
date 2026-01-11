@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Link, useSearch, useLocation } from "wouter";
-import { ArrowLeft, Search as SearchIcon, Loader2, MapPin, Star, ExternalLink, X, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, Search as SearchIcon, Loader2, MapPin, Star, ExternalLink, X, UtensilsCrossed, Heart, Check, Bookmark } from "lucide-react";
 import { toast } from "sonner";
 
 const FEATURE_OPTIONS = [
@@ -19,6 +19,13 @@ const FEATURE_OPTIONS = [
   "子連れOK",
 ];
 
+const STATUS_OPTIONS = [
+  { value: "want_to_go", label: "行きたい", icon: Heart, color: "text-pink-500" },
+  { value: "visited", label: "訪問済み", icon: Check, color: "text-green-500" },
+] as const;
+
+type PlaceStatus = "none" | "want_to_go" | "visited";
+
 export default function Search() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const searchParams = useSearch();
@@ -28,20 +35,23 @@ export default function Search() {
   const initialQuery = params.get("q") || "";
   const initialFeatures = params.get("features")?.split(",").filter(Boolean) || [];
   const initialGenre = params.get("genre") || "";
+  const initialStatus = (params.get("status") as PlaceStatus) || undefined;
 
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>(initialFeatures);
+  const [selectedStatus, setSelectedStatus] = useState<PlaceStatus | undefined>(initialStatus);
   const [isSearching, setIsSearching] = useState(false);
 
   const parseSearchMutation = trpc.ai.parseSearchQuery.useMutation();
   
-  const { data: searchResults, isLoading, refetch } = trpc.place.search.useQuery(
+  const { data: searchResults, isLoading } = trpc.place.search.useQuery(
     {
       query: initialGenre || initialQuery,
       features: selectedFeatures.length > 0 ? selectedFeatures : undefined,
+      status: selectedStatus,
     },
     {
-      enabled: isAuthenticated && (!!initialQuery || selectedFeatures.length > 0),
+      enabled: isAuthenticated && (!!initialQuery || selectedFeatures.length > 0 || !!selectedStatus),
     }
   );
 
@@ -64,6 +74,9 @@ export default function Search() {
       }
       if (result.genre) {
         newParams.set("genre", result.genre);
+      }
+      if (selectedStatus) {
+        newParams.set("status", selectedStatus);
       }
       
       setLocation(`/search?${newParams.toString()}`);
@@ -90,10 +103,35 @@ export default function Search() {
     setLocation(`/search?${newParams.toString()}`);
   };
 
+  const toggleStatus = (status: PlaceStatus) => {
+    const newStatus = selectedStatus === status ? undefined : status;
+    setSelectedStatus(newStatus);
+    
+    const newParams = new URLSearchParams(params);
+    if (newStatus) {
+      newParams.set("status", newStatus);
+    } else {
+      newParams.delete("status");
+    }
+    setLocation(`/search?${newParams.toString()}`);
+  };
+
   const clearFilters = () => {
     setSelectedFeatures([]);
+    setSelectedStatus(undefined);
     setSearchQuery("");
     setLocation("/search");
+  };
+
+  const getStatusIcon = (status: PlaceStatus) => {
+    switch (status) {
+      case "want_to_go":
+        return <Heart className="w-4 h-4 fill-pink-500 text-pink-500" />;
+      case "visited":
+        return <Check className="w-4 h-4 text-green-500" />;
+      default:
+        return <Bookmark className="w-4 h-4" />;
+    }
   };
 
   if (authLoading) {
@@ -169,11 +207,35 @@ export default function Search() {
           </Button>
         </div>
 
+        {/* Status Filters */}
+        <div className="max-w-2xl mx-auto mb-4">
+          <h2 className="text-sm font-medium text-muted-foreground mb-3">ステータスで絞り込み</h2>
+          <div className="flex flex-wrap gap-2">
+            {STATUS_OPTIONS.map(({ value, label, icon: Icon, color }) => (
+              <button
+                key={value}
+                type="button"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${
+                  selectedStatus === value
+                    ? value === "want_to_go"
+                      ? "bg-pink-100 border-pink-300 text-pink-700"
+                      : "bg-green-100 border-green-300 text-green-700"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+                onClick={() => toggleStatus(value)}
+              >
+                <Icon className={`w-4 h-4 ${selectedStatus === value ? (value === "want_to_go" ? "fill-pink-500" : "") : ""}`} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Feature Filters */}
         <div className="max-w-2xl mx-auto mb-8">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-medium text-muted-foreground">条件タグで絞り込み</h2>
-            {selectedFeatures.length > 0 && (
+            {(selectedFeatures.length > 0 || selectedStatus) && (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 <X className="w-4 h-4 mr-1" />
                 クリア
@@ -216,6 +278,7 @@ export default function Search() {
                           <h3 className="font-semibold text-lg truncate">
                             {place.name}
                           </h3>
+                          {getStatusIcon(place.status as PlaceStatus)}
                           {place.genre && (
                             <span className="feature-tag shrink-0">{place.genre}</span>
                           )}
@@ -249,6 +312,12 @@ export default function Search() {
                               {place.rating}
                             </span>
                           )}
+                          {place.userRating && (
+                            <span className="flex items-center gap-1 text-primary">
+                              <Star className="w-4 h-4 fill-primary text-primary" />
+                              {place.userRating}/5 (自分)
+                            </span>
+                          )}
                           {place.address && (
                             <span className="flex items-center gap-1 truncate">
                               <MapPin className="w-4 h-4 shrink-0" />
@@ -275,7 +344,7 @@ export default function Search() {
                 </Card>
               ))}
             </div>
-          ) : initialQuery || selectedFeatures.length > 0 ? (
+          ) : initialQuery || selectedFeatures.length > 0 || selectedStatus ? (
             <div className="text-center py-12">
               <SearchIcon className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
               <h2 className="text-lg font-medium mb-2">該当する店舗がありません</h2>

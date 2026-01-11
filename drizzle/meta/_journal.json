@@ -15,6 +15,13 @@
       "when": 1768123803790,
       "tag": "0001_mushy_banshee",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1768124791746,
+      "tag": "0002_romantic_mongu",
+      "breakpoints": true
     }
   ]
 }

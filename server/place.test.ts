@@ -225,21 +225,92 @@ describe("place router", () => {
     });
   });
 
-  describe("place.delete", () => {
-    it("deletes a place for authenticated user", async () => {
-      const ctx = createAuthContext();
-      const caller = appRouter.createCaller(ctx);
+describe("place.delete", () => {
+  it("deletes a place for authenticated user", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
 
-      const result = await caller.place.delete({ id: 1 });
+    const result = await caller.place.delete({ id: 1 });
 
-      expect(result.success).toBe(true);
-    });
-
-    it("throws error when deleting non-existent place", async () => {
-      const ctx = createAuthContext();
-      const caller = appRouter.createCaller(ctx);
-
-      await expect(caller.place.delete({ id: 999 })).rejects.toThrow();
-    });
+    expect(result.success).toBe(true);
   });
+
+  it("throws error when deleting non-existent place", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(caller.place.delete({ id: 999 })).rejects.toThrow();
+  });
+});
+
+describe("place.updateStatus", () => {
+  it("updates place status to want_to_go", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.place.updateStatus({
+      id: 1,
+      status: "want_to_go",
+    });
+
+    expect(result).toBeDefined();
+  });
+
+  it("updates place status to visited", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.place.updateStatus({
+      id: 1,
+      status: "visited",
+    });
+
+    expect(result).toBeDefined();
+  });
+
+  it("throws error for non-existent place", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.place.updateStatus({ id: 999, status: "visited" })
+    ).rejects.toThrow();
+  });
+});
+
+describe("place.updateRating", () => {
+  it("updates user rating for a place", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.place.updateRating({
+      id: 1,
+      userRating: 4,
+      userNote: "美味しかった！",
+    });
+
+    expect(result).toBeDefined();
+  });
+
+  it("clears user rating when set to null", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.place.updateRating({
+      id: 1,
+      userRating: null,
+    });
+
+    expect(result).toBeDefined();
+  });
+
+  it("throws error for non-existent place", async () => {
+    const ctx = createAuthContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.place.updateRating({ id: 999, userRating: 5 })
+    ).rejects.toThrow();
+  });
+});
 });

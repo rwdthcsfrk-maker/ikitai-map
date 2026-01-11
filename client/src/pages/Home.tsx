@@ -7,26 +7,108 @@ import { MapView } from "@/components/Map";
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, Plus, List, MapPin, Star, ExternalLink, Loader2, UtensilsCrossed } from "lucide-react";
+import { Search, Plus, List, MapPin, Star, ExternalLink, Loader2, UtensilsCrossed, Navigation, Heart, Check, Bookmark } from "lucide-react";
 import { toast } from "sonner";
+import PlaceDetailDialog from "@/components/PlaceDetailDialog";
+
+type PlaceStatus = "none" | "want_to_go" | "visited";
 
 export default function Home() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<number | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
 
+  const utils = trpc.useUtils();
   const { data: places, isLoading: placesLoading } = trpc.place.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
 
   const parseSearchMutation = trpc.ai.parseSearchQuery.useMutation();
+  const updateStatusMutation = trpc.place.updateStatus.useMutation({
+    onSuccess: () => {
+      utils.place.list.invalidate();
+    },
+  });
 
   const handleMapReady = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
   }, []);
+
+  // 現在地を取得
+  const getCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      toast.error("お使いのブラウザは位置情報に対応していません");
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setCurrentLocation({ lat: latitude, lng: longitude });
+        setIsLocating(false);
+
+        if (map) {
+          map.panTo({ lat: latitude, lng: longitude });
+          map.setZoom(15);
+
+          // 現在地マーカーを更新
+          if (currentLocationMarkerRef.current) {
+            currentLocationMarkerRef.current.map = null;
+          }
+
+          const locationPin = document.createElement("div");
+          locationPin.innerHTML = `
+            <div style="
+              width: 24px;
+              height: 24px;
+              background: #3b82f6;
+              border: 3px solid white;
+              border-radius: 50%;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            "></div>
+          `;
+
+          currentLocationMarkerRef.current = new google.maps.marker.AdvancedMarkerElement({
+            map,
+            position: { lat: latitude, lng: longitude },
+            content: locationPin,
+            title: "現在地",
+          });
+        }
+
+        toast.success("現在地を取得しました");
+      },
+      (error) => {
+        setIsLocating(false);
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            toast.error("位置情報の取得が許可されていません");
+            break;
+          case error.POSITION_UNAVAILABLE:
+            toast.error("位置情報を取得できませんでした");
+            break;
+          case error.TIMEOUT:
+            toast.error("位置情報の取得がタイムアウトしました");
+            break;
+          default:
+            toast.error("位置情報の取得に失敗しました");
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  }, [map]);
 
   // マーカーを配置
   useEffect(() => {
@@ -41,10 +123,21 @@ export default function Home() {
         const lat = parseFloat(place.latitude);
         const lng = parseFloat(place.longitude);
         
+        // ステータスに応じた色を設定
+        let pinColor = "#c53030"; // デフォルト（赤）
+        let emoji = "🍽";
+        if (place.status === "want_to_go") {
+          pinColor = "#ec4899"; // ピンク（行きたい）
+          emoji = "❤️";
+        } else if (place.status === "visited") {
+          pinColor = "#22c55e"; // 緑（訪問済み）
+          emoji = "✓";
+        }
+        
         const pinElement = document.createElement('div');
         pinElement.innerHTML = `
           <div style="
-            background: var(--primary, #c53030);
+            background: ${pinColor};
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
             width: 32px;
@@ -54,7 +147,7 @@ export default function Home() {
             justify-content: center;
             box-shadow: 0 2px 6px rgba(0,0,0,0.3);
           ">
-            <span style="transform: rotate(45deg); color: white; font-size: 14px;">🍽</span>
+            <span style="transform: rotate(45deg); color: white; font-size: 14px;">${emoji}</span>
           </div>
         `;
 
@@ -108,7 +201,42 @@ export default function Home() {
     }
   };
 
+  const handleStatusChange = async (placeId: number, status: PlaceStatus) => {
+    try {
+      await updateStatusMutation.mutateAsync({ id: placeId, status });
+      toast.success(
+        status === "want_to_go" ? "行きたいリストに追加しました" :
+        status === "visited" ? "訪問済みにしました" :
+        "ステータスを解除しました"
+      );
+    } catch (error) {
+      toast.error("更新に失敗しました");
+    }
+  };
+
   const selectedPlaceData = places?.find(p => p.id === selectedPlace);
+
+  const getStatusIcon = (status: PlaceStatus) => {
+    switch (status) {
+      case "want_to_go":
+        return <Heart className="w-4 h-4 fill-pink-500 text-pink-500" />;
+      case "visited":
+        return <Check className="w-4 h-4 text-green-500" />;
+      default:
+        return <Bookmark className="w-4 h-4" />;
+    }
+  };
+
+  const getStatusLabel = (status: PlaceStatus) => {
+    switch (status) {
+      case "want_to_go":
+        return "行きたい";
+      case "visited":
+        return "訪問済み";
+      default:
+        return "未設定";
+    }
+  };
 
   if (authLoading) {
     return (
@@ -230,6 +358,21 @@ export default function Home() {
             initialZoom={12}
           />
 
+          {/* Current Location Button */}
+          <Button
+            variant="secondary"
+            size="icon"
+            className="absolute top-4 right-4 shadow-md bg-card"
+            onClick={getCurrentLocation}
+            disabled={isLocating}
+          >
+            {isLocating ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Navigation className="w-5 h-5" />
+            )}
+          </Button>
+
           {/* Place Count Badge */}
           {places && places.length > 0 && (
             <div className="absolute top-4 left-4 bg-card/90 backdrop-blur-sm rounded-full px-3 py-1.5 shadow-md">
@@ -254,9 +397,19 @@ export default function Home() {
                     </Button>
                   </div>
                   
-                  {selectedPlaceData.genre && (
-                    <span className="feature-tag mb-2">{selectedPlaceData.genre}</span>
-                  )}
+                  <div className="flex items-center gap-2 mb-2">
+                    {selectedPlaceData.genre && (
+                      <span className="feature-tag">{selectedPlaceData.genre}</span>
+                    )}
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                      selectedPlaceData.status === "want_to_go" ? "bg-pink-100 text-pink-700" :
+                      selectedPlaceData.status === "visited" ? "bg-green-100 text-green-700" :
+                      "bg-gray-100 text-gray-600"
+                    }`}>
+                      {getStatusIcon(selectedPlaceData.status as PlaceStatus)}
+                      {getStatusLabel(selectedPlaceData.status as PlaceStatus)}
+                    </span>
+                  </div>
                   
                   {selectedPlaceData.summary && (
                     <p className="text-sm text-muted-foreground mb-3">
@@ -281,19 +434,59 @@ export default function Home() {
                         {selectedPlaceData.rating}
                       </span>
                     )}
-                    {selectedPlaceData.address && (
-                      <span className="truncate">{selectedPlaceData.address}</span>
+                    {selectedPlaceData.userRating && (
+                      <span className="flex items-center gap-1 text-primary">
+                        <Star className="w-4 h-4 fill-primary text-primary" />
+                        {selectedPlaceData.userRating}/5 (自分)
+                      </span>
                     )}
                   </div>
 
-                  {selectedPlaceData.googleMapsUrl && (
-                    <Button variant="outline" size="sm" className="w-full" asChild>
-                      <a href={selectedPlaceData.googleMapsUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Googleマップで見る
-                      </a>
+                  {/* Status Buttons */}
+                  <div className="flex gap-2 mb-3">
+                    <Button
+                      variant={selectedPlaceData.status === "want_to_go" ? "default" : "outline"}
+                      size="sm"
+                      className={selectedPlaceData.status === "want_to_go" ? "bg-pink-500 hover:bg-pink-600" : ""}
+                      onClick={() => handleStatusChange(
+                        selectedPlaceData.id,
+                        selectedPlaceData.status === "want_to_go" ? "none" : "want_to_go"
+                      )}
+                    >
+                      <Heart className={`w-4 h-4 mr-1 ${selectedPlaceData.status === "want_to_go" ? "fill-white" : ""}`} />
+                      行きたい
                     </Button>
-                  )}
+                    <Button
+                      variant={selectedPlaceData.status === "visited" ? "default" : "outline"}
+                      size="sm"
+                      className={selectedPlaceData.status === "visited" ? "bg-green-500 hover:bg-green-600" : ""}
+                      onClick={() => handleStatusChange(
+                        selectedPlaceData.id,
+                        selectedPlaceData.status === "visited" ? "none" : "visited"
+                      )}
+                    >
+                      <Check className="w-4 h-4 mr-1" />
+                      訪問済み
+                    </Button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setDetailDialogOpen(true)}
+                    >
+                      詳細・評価
+                    </Button>
+                    {selectedPlaceData.googleMapsUrl && (
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={selectedPlaceData.googleMapsUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -326,10 +519,21 @@ export default function Home() {
                     }}
                   >
                     <CardContent className="p-3">
-                      <h4 className="font-medium text-sm mb-1">{place.name}</h4>
-                      {place.genre && (
-                        <span className="feature-tag text-xs">{place.genre}</span>
-                      )}
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="font-medium text-sm mb-1">{place.name}</h4>
+                        {getStatusIcon(place.status as PlaceStatus)}
+                      </div>
+                      <div className="flex items-center gap-2 mb-1">
+                        {place.genre && (
+                          <span className="feature-tag text-xs">{place.genre}</span>
+                        )}
+                        {place.userRating && (
+                          <span className="flex items-center gap-0.5 text-xs text-primary">
+                            <Star className="w-3 h-3 fill-primary" />
+                            {place.userRating}
+                          </span>
+                        )}
+                      </div>
                       {place.summary && (
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
                           {place.summary}
@@ -351,6 +555,15 @@ export default function Home() {
           </div>
         </aside>
       </div>
+
+      {/* Place Detail Dialog */}
+      {selectedPlaceData && (
+        <PlaceDetailDialog
+          place={selectedPlaceData}
+          open={detailDialogOpen}
+          onOpenChange={setDetailDialogOpen}
+        />
+      )}
     </div>
   );
 }

@@ -21,6 +21,14 @@ export type InsertUser = typeof users.$inferInsert;
 /**
  * Place table - stores restaurant/shop information
  */
+/**
+ * Place status enum
+ * - want_to_go: 行きたい（お気に入り）
+ * - visited: 訪問済み
+ * - none: 未設定
+ */
+export const placeStatusEnum = mysqlEnum("status", ["none", "want_to_go", "visited"]);
+
 export const places = mysqlTable("places", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
@@ -38,6 +46,11 @@ export const places = mysqlTable("places", {
   rating: decimal("rating", { precision: 2, scale: 1 }),
   priceLevel: int("priceLevel"),
   photoUrl: text("photoUrl"),
+  // User status and rating
+  status: placeStatusEnum.default("none").notNull(),
+  userRating: int("userRating"), // 1-5 stars, null if not rated
+  userNote: text("userNote"), // User's personal note/review
+  visitedAt: timestamp("visitedAt"), // When the user visited
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
