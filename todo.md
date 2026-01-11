@@ -46,3 +46,11 @@
 - [x] OAuth認証対応（デモモード）
 - [x] 現在地取得機能（expo-location）
 - [x] Expo GO接続設定ドキュメント作成
+
+
+## 本番OAuth認証（v4）
+- [x] expo-auth-sessionインストール
+- [x] OAuth認証フロー実装
+- [x] ログイン画面作成
+- [x] 認証状態の永続化（SecureStore）
+- [x] 認証済みユーザーのみアクセス可能に
