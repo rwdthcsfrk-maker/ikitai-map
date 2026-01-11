@@ -273,3 +273,44 @@ export async function getListPlaceCount(listId: number): Promise<number> {
   
   return result[0]?.count ?? 0;
 }
+
+
+// ==================== Statistics Queries ====================
+
+export async function getUserStats(userId: number): Promise<{
+  totalPlaces: number;
+  totalLists: number;
+  visitedCount: number;
+  wantToGoCount: number;
+}> {
+  const db = await getDb();
+  if (!db) {
+    return { totalPlaces: 0, totalLists: 0, visitedCount: 0, wantToGoCount: 0 };
+  }
+
+  // Total places
+  const placesResult = await db.select({ count: sql<number>`count(*)` })
+    .from(places)
+    .where(eq(places.userId, userId));
+  const totalPlaces = placesResult[0]?.count ?? 0;
+
+  // Total lists
+  const listsResult = await db.select({ count: sql<number>`count(*)` })
+    .from(lists)
+    .where(eq(lists.userId, userId));
+  const totalLists = listsResult[0]?.count ?? 0;
+
+  // Visited count
+  const visitedResult = await db.select({ count: sql<number>`count(*)` })
+    .from(places)
+    .where(and(eq(places.userId, userId), eq(places.status, "visited")));
+  const visitedCount = visitedResult[0]?.count ?? 0;
+
+  // Want to go count
+  const wantToGoResult = await db.select({ count: sql<number>`count(*)` })
+    .from(places)
+    .where(and(eq(places.userId, userId), eq(places.status, "want_to_go")));
+  const wantToGoCount = wantToGoResult[0]?.count ?? 0;
+
+  return { totalPlaces, totalLists, visitedCount, wantToGoCount };
+}

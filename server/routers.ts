@@ -353,6 +353,13 @@ ${input.reviews?.length ? `レビュー抜粋: ${input.reviews.slice(0, 3).join(
     }),
 });
 
+// ==================== User Router ====================
+const userRouter = router({
+  stats: protectedProcedure.query(async ({ ctx }) => {
+    return db.getUserStats(ctx.user.id);
+  }),
+});
+
 // ==================== Main Router ====================
 export const appRouter = router({
   system: systemRouter,
@@ -364,6 +371,7 @@ export const appRouter = router({
       return { success: true } as const;
     }),
   }),
+  user: userRouter,
   place: placeRouter,
   list: listRouter,
   ai: aiRouter,

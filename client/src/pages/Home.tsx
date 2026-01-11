@@ -10,6 +10,7 @@ import { Link, useLocation } from "wouter";
 import { Search, Plus, List, MapPin, Star, ExternalLink, Loader2, UtensilsCrossed, Navigation, Heart, Check, Bookmark } from "lucide-react";
 import { toast } from "sonner";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
+import PlaceEditDialog from "@/components/PlaceEditDialog";
 
 type PlaceStatus = "none" | "want_to_go" | "visited";
 
@@ -19,6 +20,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<number | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
@@ -562,6 +564,16 @@ export default function Home() {
           place={selectedPlaceData}
           open={detailDialogOpen}
           onOpenChange={setDetailDialogOpen}
+          onEdit={() => setEditDialogOpen(true)}
+        />
+      )}
+
+      {/* Place Edit Dialog */}
+      {selectedPlaceData && (
+        <PlaceEditDialog
+          place={selectedPlaceData}
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
         />
       )}
     </div>

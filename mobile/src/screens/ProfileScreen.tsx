@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,10 +11,42 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { colors, spacing, fontSize, borderRadius } from "../lib/theme";
+import { API_BASE_URL } from "../lib/config";
+
+interface Stats {
+  totalPlaces: number;
+  totalLists: number;
+  visitedCount: number;
+  wantToGoCount: number;
+}
 
 export default function ProfileScreen() {
   const { user, logout, isLoading } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      setStatsLoading(true);
+      // デモモードの場合はダミーデータを表示
+      // 本番環境ではAPIから取得
+      setStats({
+        totalPlaces: 0,
+        totalLists: 0,
+        visitedCount: 0,
+        wantToGoCount: 0,
+      });
+    } catch (error) {
+      console.error("Failed to fetch stats:", error);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -71,24 +103,41 @@ export default function ProfileScreen() {
         {/* Stats Section */}
         <View style={styles.statsCard}>
           <Text style={styles.sectionTitle}>統計情報</Text>
-          <View style={styles.statsGrid}>
-            <View style={styles.statItem}>
-              <Ionicons name="location" size={24} color={colors.primary} />
-              <Text style={styles.statValue}>-</Text>
-              <Text style={styles.statLabel}>保存した店舗</Text>
+          {statsLoading ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <View style={styles.statsGrid}>
+              <View style={styles.statItem}>
+                <Ionicons name="location" size={24} color={colors.primary} />
+                <Text style={styles.statValue}>{stats?.totalPlaces ?? 0}</Text>
+                <Text style={styles.statLabel}>保存した店舗</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Ionicons name="list" size={24} color={colors.primary} />
+                <Text style={styles.statValue}>{stats?.totalLists ?? 0}</Text>
+                <Text style={styles.statLabel}>リスト</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+                <Text style={styles.statValue}>{stats?.visitedCount ?? 0}</Text>
+                <Text style={styles.statLabel}>訪問済み</Text>
+              </View>
             </View>
-            <View style={styles.statItem}>
-              <Ionicons name="list" size={24} color={colors.primary} />
-              <Text style={styles.statValue}>-</Text>
-              <Text style={styles.statLabel}>リスト</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-              <Text style={styles.statValue}>-</Text>
-              <Text style={styles.statLabel}>訪問済み</Text>
+          )}
+        </View>
+
+        {/* Want to Go Stats */}
+        {stats && stats.wantToGoCount > 0 && (
+          <View style={styles.wantToGoCard}>
+            <View style={styles.wantToGoContent}>
+              <Ionicons name="heart" size={24} color="#ec4899" />
+              <View style={styles.wantToGoText}>
+                <Text style={styles.wantToGoValue}>{stats.wantToGoCount}</Text>
+                <Text style={styles.wantToGoLabel}>行きたい店舗</Text>
+              </View>
             </View>
           </View>
-        </View>
+        )}
 
         {/* Settings Section */}
         <View style={styles.settingsCard}>
@@ -240,6 +289,31 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.mutedForeground,
     marginTop: 2,
+  },
+  wantToGoCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderLeftWidth: 4,
+    borderLeftColor: "#ec4899",
+  },
+  wantToGoContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  wantToGoText: {
+    flex: 1,
+  },
+  wantToGoValue: {
+    fontSize: fontSize.lg,
+    fontWeight: "bold",
+    color: colors.foreground,
+  },
+  wantToGoLabel: {
+    fontSize: fontSize.sm,
+    color: colors.mutedForeground,
   },
   settingsCard: {
     backgroundColor: colors.card,

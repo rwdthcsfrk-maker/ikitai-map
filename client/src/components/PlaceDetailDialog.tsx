@@ -9,7 +9,18 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
-import { Star, MapPin, ExternalLink, Heart, Check, Loader2 } from "lucide-react";
+import { Star, MapPin, ExternalLink, Heart, Check, Loader2, Pencil, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 interface Place {
@@ -32,12 +43,14 @@ interface PlaceDetailDialogProps {
   place: Place;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onEdit?: () => void;
 }
 
 export default function PlaceDetailDialog({
   place,
   open,
   onOpenChange,
+  onEdit,
 }: PlaceDetailDialogProps) {
   const [userRating, setUserRating] = useState<number | null>(place.userRating ?? null);
   const [userNote, setUserNote] = useState(place.userNote ?? "");
@@ -58,6 +71,17 @@ export default function PlaceDetailDialog({
   const updateStatusMutation = trpc.place.updateStatus.useMutation({
     onSuccess: () => {
       utils.place.list.invalidate();
+    },
+  });
+
+  const deleteMutation = trpc.place.delete.useMutation({
+    onSuccess: () => {
+      utils.place.list.invalidate();
+      toast.success("店舗を削除しました");
+      onOpenChange(false);
+    },
+    onError: () => {
+      toast.error("削除に失敗しました");
     },
   });
 
@@ -218,25 +242,72 @@ export default function PlaceDetailDialog({
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2 pt-2">
-            <Button
-              className="flex-1"
-              onClick={handleSaveRating}
-              disabled={updateRatingMutation.isPending}
-            >
-              {updateRatingMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : null}
-              評価を保存
-            </Button>
-            {place.googleMapsUrl && (
-              <Button variant="outline" asChild>
-                <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Googleマップ
-                </a>
+          <div className="flex flex-col gap-2 pt-2">
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                onClick={handleSaveRating}
+                disabled={updateRatingMutation.isPending}
+              >
+                {updateRatingMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : null}
+                評価を保存
               </Button>
-            )}
+              {place.googleMapsUrl && (
+                <Button variant="outline" asChild>
+                  <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Googleマップ
+                  </a>
+                </Button>
+              )}
+            </div>
+            
+            {/* Edit & Delete */}
+            <div className="flex gap-2 pt-2 border-t">
+              {onEdit && (
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onEdit();
+                  }}
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  編集
+                </Button>
+              )}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" className="flex-1 text-destructive hover:text-destructive">
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    削除
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>店舗を削除しますか？</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      「{place.name}」を削除します。この操作は取り消せません。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => deleteMutation.mutate({ id: place.id })}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : null}
+                      削除
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </div>
         </div>
       </DialogContent>
