@@ -16,6 +16,7 @@ import ListsScreen from "./src/screens/ListsScreen";
 import SearchScreen from "./src/screens/SearchScreen";
 import AddPlaceScreen from "./src/screens/AddPlaceScreen";
 import LoginScreen from "./src/screens/LoginScreen";
+import ProfileScreen from "./src/screens/ProfileScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -37,6 +38,8 @@ function TabNavigator() {
             iconName = focused ? "list" : "list-outline";
           } else if (route.name === "Add") {
             iconName = focused ? "add-circle" : "add-circle-outline";
+          } else if (route.name === "Profile") {
+            iconName = focused ? "person" : "person-outline";
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -66,6 +69,11 @@ function TabNavigator() {
         name="Add"
         component={AddPlaceScreen}
         options={{ tabBarLabel: "追加" }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ tabBarLabel: "マイページ" }}
       />
     </Tab.Navigator>
   );
