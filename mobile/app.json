@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "行きたい店マップ",
+    "slug": "ikitai-map",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#c53030"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ikitaimap.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "現在地を表示するために位置情報を使用します"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#c53030"
+      },
+      "package": "com.ikitaimap.app",
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "現在地を表示するために位置情報を使用します"
+        }
+      ]
+    ]
+  }
+}
