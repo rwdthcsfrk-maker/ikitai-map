@@ -6,7 +6,23 @@ import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { useState, useMemo } from "react";
 import { Link, useSearch, useLocation } from "wouter";
-import { ArrowLeft, Search as SearchIcon, Loader2, MapPin, Star, ExternalLink, X, UtensilsCrossed, Heart, Check, Bookmark } from "lucide-react";
+import {
+  ArrowLeft,
+  Search as SearchIcon,
+  Loader2,
+  MapPin,
+  Star,
+  ExternalLink,
+  X,
+  Heart,
+  Check,
+  Bookmark,
+  Home as HomeIcon,
+  Plus,
+  List,
+  User,
+  Filter,
+} from "lucide-react";
 import { toast } from "sonner";
 
 const FEATURE_OPTIONS = [
@@ -30,7 +46,7 @@ export default function Search() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const searchParams = useSearch();
   const [, setLocation] = useLocation();
-  
+
   const params = useMemo(() => new URLSearchParams(searchParams), [searchParams]);
   const initialQuery = params.get("q") || "";
   const initialFeatures = params.get("features")?.split(",").filter(Boolean) || [];
@@ -43,7 +59,7 @@ export default function Search() {
   const [isSearching, setIsSearching] = useState(false);
 
   const parseSearchMutation = trpc.ai.parseSearchQuery.useMutation();
-  
+
   const { data: searchResults, isLoading } = trpc.place.search.useQuery(
     {
       query: initialGenre || initialQuery,
@@ -51,7 +67,8 @@ export default function Search() {
       status: selectedStatus,
     },
     {
-      enabled: isAuthenticated && (!!initialQuery || selectedFeatures.length > 0 || !!selectedStatus),
+      enabled:
+        isAuthenticated && (!!initialQuery || selectedFeatures.length > 0 || !!selectedStatus),
     }
   );
 
@@ -64,10 +81,10 @@ export default function Search() {
     setIsSearching(true);
     try {
       const result = await parseSearchMutation.mutateAsync({ query: searchQuery });
-      
+
       const newParams = new URLSearchParams();
       newParams.set("q", searchQuery);
-      
+
       if (result.features?.length) {
         setSelectedFeatures(result.features);
         newParams.set("features", result.features.join(","));
@@ -78,7 +95,7 @@ export default function Search() {
       if (selectedStatus) {
         newParams.set("status", selectedStatus);
       }
-      
+
       setLocation(`/search?${newParams.toString()}`);
     } catch (error) {
       toast.error("検索に失敗しました");
@@ -91,9 +108,9 @@ export default function Search() {
     const newFeatures = selectedFeatures.includes(feature)
       ? selectedFeatures.filter((f) => f !== feature)
       : [...selectedFeatures, feature];
-    
+
     setSelectedFeatures(newFeatures);
-    
+
     const newParams = new URLSearchParams(params);
     if (newFeatures.length > 0) {
       newParams.set("features", newFeatures.join(","));
@@ -106,7 +123,7 @@ export default function Search() {
   const toggleStatus = (status: PlaceStatus) => {
     const newStatus = selectedStatus === status ? undefined : status;
     setSelectedStatus(newStatus);
-    
+
     const newParams = new URLSearchParams(params);
     if (newStatus) {
       newParams.set("status", newStatus);
@@ -144,11 +161,11 @@ export default function Search() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Card className="w-full max-w-md mx-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
             <p className="mb-4">ログインが必要です</p>
-            <Button asChild>
+            <Button asChild className="w-full h-12">
               <a href={getLoginUrl()}>ログイン</a>
             </Button>
           </CardContent>
@@ -158,73 +175,73 @@ export default function Search() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card px-4 py-3 sticky top-0 z-10">
-        <div className="container flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/">
-              <ArrowLeft className="w-4 h-4 mr-1" />
-              マップ
-            </Link>
-          </Button>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <UtensilsCrossed className="w-4 h-4 text-primary-foreground" />
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header - スマホ最適化 */}
+      <header className="border-b bg-card px-3 py-2 sticky top-0 z-10 safe-area-top">
+        <div className="flex items-center gap-2">
+          <Link href="/">
+            <Button variant="ghost" size="icon" className="h-10 w-10">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+          </Link>
+          <div className="flex-1 min-w-0">
+            <div className="relative">
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="カップル向け イタリアン..."
+                className="pl-9 pr-3 h-10 rounded-full text-sm"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              />
             </div>
-            <h1 className="font-semibold">検索</h1>
-          </div>
-        </div>
-      </header>
-
-      {/* Search Section */}
-      <div className="container py-6">
-        {/* Search Input */}
-        <div className="max-w-2xl mx-auto mb-6">
-          <div className="relative">
-            <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="カップル向け イタリアン 個室あり..."
-              className="pl-12 pr-4 py-6 text-lg rounded-full"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            />
           </div>
           <Button
-            className="w-full mt-3"
-            size="lg"
+            size="icon"
+            className="h-10 w-10 shrink-0"
             onClick={handleSearch}
             disabled={isSearching}
           >
             {isSearching ? (
-              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <SearchIcon className="w-5 h-5 mr-2" />
+              <SearchIcon className="w-4 h-4" />
             )}
-            自然言語で検索
           </Button>
         </div>
+      </header>
 
+      {/* Filters - スマホ最適化 */}
+      <div className="px-4 py-3 border-b bg-card space-y-3">
         {/* Status Filters */}
-        <div className="max-w-2xl mx-auto mb-4">
-          <h2 className="text-sm font-medium text-muted-foreground mb-3">ステータスで絞り込み</h2>
-          <div className="flex flex-wrap gap-2">
-            {STATUS_OPTIONS.map(({ value, label, icon: Icon, color }) => (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-muted-foreground">ステータス</span>
+            {(selectedFeatures.length > 0 || selectedStatus) && (
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>
+                <X className="w-3 h-3 mr-1" />
+                クリア
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
+            {STATUS_OPTIONS.map(({ value, label, icon: Icon }) => (
               <button
                 key={value}
                 type="button"
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-colors border whitespace-nowrap ${
                   selectedStatus === value
                     ? value === "want_to_go"
                       ? "bg-pink-100 border-pink-300 text-pink-700"
                       : "bg-green-100 border-green-300 text-green-700"
-                    : "bg-background border-border hover:bg-muted"
+                    : "bg-background border-border"
                 }`}
                 onClick={() => toggleStatus(value)}
               >
-                <Icon className={`w-4 h-4 ${selectedStatus === value ? (value === "want_to_go" ? "fill-pink-500" : "") : ""}`} />
+                <Icon
+                  className={`w-4 h-4 ${selectedStatus === value && value === "want_to_go" ? "fill-pink-500" : ""}`}
+                />
                 {label}
               </button>
             ))}
@@ -232,23 +249,17 @@ export default function Search() {
         </div>
 
         {/* Feature Filters */}
-        <div className="max-w-2xl mx-auto mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-muted-foreground">条件タグで絞り込み</h2>
-            {(selectedFeatures.length > 0 || selectedStatus) && (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                <X className="w-4 h-4 mr-1" />
-                クリア
-              </Button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
+        <div>
+          <span className="text-xs font-medium text-muted-foreground mb-2 block">こだわり条件</span>
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
             {FEATURE_OPTIONS.map((feature) => (
               <button
                 key={feature}
                 type="button"
-                className={`feature-tag transition-colors ${
-                  selectedFeatures.includes(feature) ? "active" : ""
+                className={`px-3 py-2 rounded-full text-sm font-medium transition-colors border whitespace-nowrap ${
+                  selectedFeatures.includes(feature)
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border"
                 }`}
                 onClick={() => toggleFeature(feature)}
               >
@@ -257,116 +268,136 @@ export default function Search() {
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Results */}
-        <div className="max-w-2xl mx-auto">
-          {isLoading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : searchResults && searchResults.length > 0 ? (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                {searchResults.length} 件の店舗が見つかりました
-              </p>
-              {searchResults.map((place) => (
-                <Card key={place.id} className="place-card">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold text-lg truncate">
-                            {place.name}
-                          </h3>
-                          {getStatusIcon(place.status as PlaceStatus)}
-                          {place.genre && (
-                            <span className="feature-tag shrink-0">{place.genre}</span>
-                          )}
-                        </div>
-
-                        {place.summary && (
-                          <p className="text-sm text-muted-foreground mb-3">
-                            {place.summary}
-                          </p>
-                        )}
-
-                        {place.features && place.features.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-3">
-                            {place.features.map((feature, i) => (
-                              <span
-                                key={i}
-                                className={`feature-tag text-xs ${
-                                  selectedFeatures.includes(feature) ? "active" : ""
-                                }`}
-                              >
-                                {feature}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          {place.rating && (
-                            <span className="flex items-center gap-1">
-                              <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                              {place.rating}
-                            </span>
-                          )}
-                          {place.userRating && (
-                            <span className="flex items-center gap-1 text-primary">
-                              <Star className="w-4 h-4 fill-primary text-primary" />
-                              {place.userRating}/5 (自分)
-                            </span>
-                          )}
-                          {place.address && (
-                            <span className="flex items-center gap-1 truncate">
-                              <MapPin className="w-4 h-4 shrink-0" />
-                              {place.address}
-                            </span>
-                          )}
-                        </div>
+      {/* Results */}
+      <main className="flex-1 px-4 py-4 pb-24 overflow-y-auto">
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : searchResults && searchResults.length > 0 ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">{searchResults.length} 件の店舗</p>
+            {searchResults.map((place) => (
+              <Card key={place.id} className="active:scale-[0.98] transition-transform">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-base truncate">{place.name}</h3>
+                        {getStatusIcon(place.status as PlaceStatus)}
                       </div>
 
-                      {place.googleMapsUrl && (
-                        <Button variant="outline" size="sm" asChild className="shrink-0">
-                          <a
-                            href={place.googleMapsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <ExternalLink className="w-4 h-4 mr-1" />
-                            詳細
-                          </a>
-                        </Button>
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        {place.genre && (
+                          <span className="text-xs bg-muted px-2 py-0.5 rounded">{place.genre}</span>
+                        )}
+                        {place.userRating && (
+                          <span className="flex items-center gap-0.5 text-xs text-primary">
+                            <Star className="w-3 h-3 fill-primary" />
+                            {place.userRating}
+                          </span>
+                        )}
+                      </div>
+
+                      {place.summary && (
+                        <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+                          {place.summary}
+                        </p>
                       )}
+
+                      {place.features && place.features.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mb-2">
+                          {place.features.slice(0, 3).map((feature, i) => (
+                            <span
+                              key={i}
+                              className={`text-xs px-2 py-0.5 rounded-full border ${
+                                selectedFeatures.includes(feature)
+                                  ? "bg-primary/10 border-primary text-primary"
+                                  : "bg-muted border-transparent"
+                              }`}
+                            >
+                              {feature}
+                            </span>
+                          ))}
+                          {place.features.length > 3 && (
+                            <span className="text-xs text-muted-foreground">
+                              +{place.features.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <MapPin className="w-3 h-3" />
+                        <span className="truncate">{place.address}</span>
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : initialQuery || selectedFeatures.length > 0 || selectedStatus ? (
-            <div className="text-center py-12">
-              <SearchIcon className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
-              <h2 className="text-lg font-medium mb-2">該当する店舗がありません</h2>
-              <p className="text-muted-foreground mb-4">
-                条件を変更するか、新しい店舗を追加してください
-              </p>
-              <Button asChild>
-                <Link href="/add">店舗を追加</Link>
-              </Button>
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <SearchIcon className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
-              <h2 className="text-lg font-medium mb-2">検索してみましょう</h2>
-              <p className="text-muted-foreground">
-                自然言語で条件を入力するか、<br />
-                タグを選択して店舗を検索できます
-              </p>
-            </div>
-          )}
+
+                    {place.googleMapsUrl && (
+                      <Button variant="ghost" size="icon" className="shrink-0 h-10 w-10" asChild>
+                        <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : initialQuery || selectedFeatures.length > 0 || selectedStatus ? (
+          <div className="text-center py-12">
+            <SearchIcon className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+            <p className="text-muted-foreground">該当する店舗がありません</p>
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <SearchIcon className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
+            <p className="text-muted-foreground text-sm">
+              キーワードを入力するか、
+              <br />
+              条件を選択して検索してください
+            </p>
+          </div>
+        )}
+      </main>
+
+      {/* Bottom Navigation */}
+      <nav className="border-t bg-card px-2 py-2 safe-area-bottom fixed bottom-0 left-0 right-0">
+        <div className="flex items-center justify-around">
+          <Link href="/">
+            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+              <HomeIcon className="w-5 h-5" />
+              <span className="text-xs">ホーム</span>
+            </Button>
+          </Link>
+          <Link href="/filter">
+            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+              <Filter className="w-5 h-5" />
+              <span className="text-xs">絞り込み</span>
+            </Button>
+          </Link>
+          <Link href="/add">
+            <Button variant="default" className="h-12 w-12 rounded-full shadow-lg">
+              <Plus className="w-6 h-6" />
+            </Button>
+          </Link>
+          <Link href="/lists">
+            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+              <List className="w-5 h-5" />
+              <span className="text-xs">リスト</span>
+            </Button>
+          </Link>
+          <Link href="/lists">
+            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+              <User className="w-5 h-5" />
+              <span className="text-xs">マイページ</span>
+            </Button>
+          </Link>
         </div>
-      </div>
+      </nav>
     </div>
   );
 }

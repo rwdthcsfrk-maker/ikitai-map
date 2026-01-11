@@ -3,12 +3,31 @@ import { getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+  DrawerFooter,
+  DrawerClose,
+} from "@/components/ui/drawer";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Plus, Folder, Loader2, Trash2, UtensilsCrossed } from "lucide-react";
+import {
+  ArrowLeft,
+  Plus,
+  Folder,
+  Loader2,
+  Trash2,
+  UtensilsCrossed,
+  Home as HomeIcon,
+  Search,
+  List,
+  User,
+} from "lucide-react";
 import { toast } from "sonner";
 
 const LIST_COLORS = [
@@ -86,11 +105,11 @@ export default function Lists() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Card className="w-full max-w-md mx-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
             <p className="mb-4">ログインが必要です</p>
-            <Button asChild>
+            <Button asChild className="w-full h-12">
               <a href={getLoginUrl()}>ログイン</a>
             </Button>
           </CardContent>
@@ -100,35 +119,30 @@ export default function Lists() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card px-4 py-3 sticky top-0 z-10">
-        <div className="container flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild>
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header - スマホ最適化 */}
+      <header className="border-b bg-card px-4 py-3 sticky top-0 z-10 safe-area-top">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <Link href="/">
-              <ArrowLeft className="w-4 h-4 mr-1" />
-              マップ
-            </Link>
-          </Button>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <UtensilsCrossed className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <h1 className="font-semibold">マイリスト</h1>
-          </div>
-          <div className="flex-1" />
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="w-4 h-4 mr-1" />
-                新規リスト
+              <Button variant="ghost" size="icon" className="h-10 w-10">
+                <ArrowLeft className="w-5 h-5" />
               </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>新しいリストを作成</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
+            </Link>
+            <h1 className="font-semibold text-lg">マイリスト</h1>
+          </div>
+          <Drawer open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            <DrawerTrigger asChild>
+              <Button size="sm" className="h-10">
+                <Plus className="w-4 h-4 mr-1" />
+                新規
+              </Button>
+            </DrawerTrigger>
+            <DrawerContent>
+              <DrawerHeader className="border-b">
+                <DrawerTitle>新しいリストを作成</DrawerTitle>
+              </DrawerHeader>
+              <div className="px-4 py-6 space-y-5">
                 <div className="space-y-2">
                   <Label htmlFor="name">リスト名</Label>
                   <Input
@@ -136,6 +150,7 @@ export default function Lists() {
                     placeholder="例: デート用、会食用"
                     value={newListName}
                     onChange={(e) => setNewListName(e.target.value)}
+                    className="h-12"
                   />
                 </div>
                 <div className="space-y-2">
@@ -145,16 +160,17 @@ export default function Lists() {
                     placeholder="リストの説明"
                     value={newListDescription}
                     onChange={(e) => setNewListDescription(e.target.value)}
+                    className="h-12"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>カラー</Label>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex gap-3 flex-wrap">
                     {LIST_COLORS.map((color) => (
                       <button
                         key={color.value}
                         type="button"
-                        className={`w-8 h-8 rounded-full border-2 transition-all ${
+                        className={`w-10 h-10 rounded-full border-2 transition-all ${
                           newListColor === color.value
                             ? "border-foreground scale-110"
                             : "border-transparent"
@@ -167,66 +183,66 @@ export default function Lists() {
                   </div>
                 </div>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                  キャンセル
-                </Button>
-                <Button onClick={handleCreate} disabled={createMutation.isPending}>
+              <DrawerFooter className="border-t pt-4">
+                <Button
+                  onClick={handleCreate}
+                  disabled={createMutation.isPending}
+                  className="w-full h-12"
+                >
                   {createMutation.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                   ) : null}
                   作成
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DrawerClose asChild>
+                  <Button variant="outline" className="w-full h-12">
+                    キャンセル
+                  </Button>
+                </DrawerClose>
+              </DrawerFooter>
+            </DrawerContent>
+          </Drawer>
         </div>
       </header>
 
       {/* Content */}
-      <main className="container py-6">
+      <main className="flex-1 px-4 py-4 pb-24">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
         ) : lists && lists.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-3">
             {lists.map((list) => (
               <Link key={list.id} href={`/lists/${list.id}`}>
-                <Card className="place-card h-full cursor-pointer hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center"
-                          style={{ backgroundColor: list.color || LIST_COLORS[0].value }}
-                        >
-                          <Folder className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base">{list.name}</CardTitle>
-                          <p className="text-sm text-muted-foreground">
-                            {list.placeCount} 件
+                <Card className="cursor-pointer active:scale-[0.98] transition-transform">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: list.color || LIST_COLORS[0].value }}
+                      >
+                        <Folder className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-base truncate">{list.name}</h3>
+                        <p className="text-sm text-muted-foreground">{list.placeCount} 件</p>
+                        {list.description && (
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                            {list.description}
                           </p>
-                        </div>
+                        )}
                       </div>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-destructive"
+                        size="icon"
+                        className="shrink-0 h-10 w-10 text-muted-foreground"
                         onClick={(e) => handleDelete(list.id, e)}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-5 h-5" />
                       </Button>
                     </div>
-                  </CardHeader>
-                  {list.description && (
-                    <CardContent className="pt-0">
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {list.description}
-                      </p>
-                    </CardContent>
-                  )}
+                  </CardContent>
                 </Card>
               </Link>
             ))}
@@ -235,16 +251,51 @@ export default function Lists() {
           <div className="text-center py-12">
             <Folder className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
             <h2 className="text-lg font-medium mb-2">リストがありません</h2>
-            <p className="text-muted-foreground mb-4">
+            <p className="text-muted-foreground mb-4 text-sm">
               お店を整理するためのリストを作成しましょう
             </p>
-            <Button onClick={() => setIsCreateOpen(true)}>
+            <Button onClick={() => setIsCreateOpen(true)} className="h-12">
               <Plus className="w-4 h-4 mr-2" />
               リストを作成
             </Button>
           </div>
         )}
       </main>
+
+      {/* Bottom Navigation */}
+      <nav className="border-t bg-card px-2 py-2 safe-area-bottom fixed bottom-0 left-0 right-0">
+        <div className="flex items-center justify-around">
+          <Link href="/">
+            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+              <HomeIcon className="w-5 h-5" />
+              <span className="text-xs">ホーム</span>
+            </Button>
+          </Link>
+          <Link href="/filter">
+            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+              <Search className="w-5 h-5" />
+              <span className="text-xs">検索</span>
+            </Button>
+          </Link>
+          <Link href="/add">
+            <Button variant="default" className="h-12 w-12 rounded-full shadow-lg">
+              <Plus className="w-6 h-6" />
+            </Button>
+          </Link>
+          <Link href="/lists">
+            <Button variant="ghost" className="flex-col h-14 w-16 gap-1 text-primary">
+              <List className="w-5 h-5" />
+              <span className="text-xs">リスト</span>
+            </Button>
+          </Link>
+          <Link href="/lists">
+            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+              <User className="w-5 h-5" />
+              <span className="text-xs">マイページ</span>
+            </Button>
+          </Link>
+        </div>
+      </nav>
     </div>
   );
 }
