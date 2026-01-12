@@ -269,8 +269,8 @@ export default function FilterSearch() {
                   )}
                 </Button>
               </DrawerTrigger>
-              <DrawerContent className="max-h-[90vh]">
-                <DrawerHeader className="border-b pb-4">
+              <DrawerContent className="max-h-[90vh] flex flex-col">
+                <DrawerHeader className="border-b pb-4 shrink-0">
                   <div className="flex items-center justify-between">
                     <DrawerTitle>絞り込み条件</DrawerTitle>
                     <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -278,7 +278,7 @@ export default function FilterSearch() {
                     </Button>
                   </div>
                 </DrawerHeader>
-                <ScrollArea className="flex-1 px-4">
+                <div className="flex-1 overflow-y-auto px-4">
                   <div className="py-4 space-y-6">
                     {/* エリア・距離 */}
                     <div>
@@ -512,8 +512,8 @@ export default function FilterSearch() {
                       </div>
                     </div>
                   </div>
-                </ScrollArea>
-                <DrawerFooter className="border-t pt-4">
+                </div>
+                <DrawerFooter className="border-t pt-4 shrink-0">
                   <Button onClick={applyFilters} className="w-full h-12 text-base">
                     この条件で検索（{searchQuery.data?.total || 0}件）
                   </Button>

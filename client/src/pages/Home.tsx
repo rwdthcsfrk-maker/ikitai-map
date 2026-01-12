@@ -571,8 +571,8 @@ export default function Home() {
 
       {/* 店舗一覧Drawer */}
       <Drawer open={isPlaceListOpen} onOpenChange={setIsPlaceListOpen}>
-        <DrawerContent className="max-h-[85vh]">
-          <DrawerHeader className="pb-2">
+        <DrawerContent className="max-h-[85vh] flex flex-col">
+          <DrawerHeader className="pb-2 shrink-0">
             <DrawerTitle className="flex items-center justify-between">
               <span>保存した店舗 ({filteredPlaces?.length ?? 0}件)</span>
               <Button variant="ghost" size="sm" onClick={() => setIsPlaceListOpen(false)}>
@@ -580,7 +580,7 @@ export default function Home() {
               </Button>
             </DrawerTitle>
           </DrawerHeader>
-          <ScrollArea className="flex-1 px-4 pb-4">
+          <div className="flex-1 overflow-y-auto px-4 pb-4">
             {placesLoading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -657,7 +657,7 @@ export default function Home() {
                 )}
               </div>
             )}
-          </ScrollArea>
+          </div>
         </DrawerContent>
       </Drawer>
 
