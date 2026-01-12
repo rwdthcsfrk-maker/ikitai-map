@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
 import { Star, MapPin, ExternalLink, Heart, Check, Loader2, Pencil, Trash2 } from "lucide-react";
@@ -46,15 +47,37 @@ interface PlaceDetailDialogProps {
   onEdit?: () => void;
 }
 
+// 評価に応じた色を返す
+function getRatingColor(rating: number): string {
+  if (rating >= 80) return "text-green-600";
+  if (rating >= 60) return "text-blue-600";
+  if (rating >= 40) return "text-yellow-600";
+  if (rating >= 20) return "text-orange-600";
+  return "text-red-600";
+}
+
+// 評価に応じたラベルを返す
+function getRatingLabel(rating: number): string {
+  if (rating >= 90) return "最高！";
+  if (rating >= 80) return "とても良い";
+  if (rating >= 70) return "良い";
+  if (rating >= 60) return "まあまあ";
+  if (rating >= 50) return "普通";
+  if (rating >= 40) return "いまいち";
+  if (rating >= 30) return "残念";
+  if (rating >= 20) return "悪い";
+  return "最悪";
+}
+
 export default function PlaceDetailDialog({
   place,
   open,
   onOpenChange,
   onEdit,
 }: PlaceDetailDialogProps) {
-  const [userRating, setUserRating] = useState<number | null>(place.userRating ?? null);
+  const [userRating, setUserRating] = useState<number>(place.userRating ?? 50);
+  const [hasRating, setHasRating] = useState<boolean>(place.userRating !== null && place.userRating !== undefined);
   const [userNote, setUserNote] = useState(place.userNote ?? "");
-  const [hoveredRating, setHoveredRating] = useState<number | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -86,14 +109,15 @@ export default function PlaceDetailDialog({
   });
 
   useEffect(() => {
-    setUserRating(place.userRating ?? null);
+    setUserRating(place.userRating ?? 50);
+    setHasRating(place.userRating !== null && place.userRating !== undefined);
     setUserNote(place.userNote ?? "");
   }, [place]);
 
   const handleSaveRating = () => {
     updateRatingMutation.mutate({
       id: place.id,
-      userRating,
+      userRating: hasRating ? userRating : null,
       userNote: userNote || undefined,
     });
   };
@@ -196,35 +220,75 @@ export default function PlaceDetailDialog({
             )}
           </div>
 
-          {/* User Rating */}
+          {/* User Rating - 100点満点 */}
           <div>
-            <Label className="text-sm font-medium mb-2 block">自分の評価</Label>
-            <div className="flex items-center gap-1 mb-2">
-              {[1, 2, 3, 4, 5].map((rating) => (
-                <button
-                  key={rating}
-                  type="button"
-                  className="p-1 transition-transform hover:scale-110"
-                  onMouseEnter={() => setHoveredRating(rating)}
-                  onMouseLeave={() => setHoveredRating(null)}
-                  onClick={() => setUserRating(userRating === rating ? null : rating)}
-                >
-                  <Star
-                    className={`w-8 h-8 transition-colors ${
-                      rating <= (hoveredRating ?? userRating ?? 0)
-                        ? "fill-primary text-primary"
-                        : "text-muted-foreground/30"
-                    }`}
-                  />
-                </button>
-              ))}
-              {userRating && (
-                <span className="ml-2 text-sm font-medium">{userRating}/5</span>
-              )}
+            <div className="flex items-center justify-between mb-2">
+              <Label className="text-sm font-medium">自分の評価</Label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={hasRating}
+                  onChange={(e) => setHasRating(e.target.checked)}
+                  className="rounded"
+                />
+                評価する
+              </label>
             </div>
-            <p className="text-xs text-muted-foreground">
-              クリックで評価、もう一度クリックで解除
-            </p>
+            
+            {hasRating ? (
+              <div className="space-y-3">
+                {/* 評価表示 */}
+                <div className="flex items-center justify-center gap-3 py-4 bg-muted/50 rounded-lg">
+                  <span className={`text-5xl font-bold ${getRatingColor(userRating)}`}>
+                    {userRating}
+                  </span>
+                  <div className="text-left">
+                    <span className="text-lg text-muted-foreground">/100</span>
+                    <p className={`text-sm font-medium ${getRatingColor(userRating)}`}>
+                      {getRatingLabel(userRating)}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* スライダー */}
+                <div className="px-2">
+                  <Slider
+                    value={[userRating]}
+                    onValueChange={(value) => setUserRating(value[0])}
+                    max={100}
+                    min={0}
+                    step={1}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>0</span>
+                    <span>25</span>
+                    <span>50</span>
+                    <span>75</span>
+                    <span>100</span>
+                  </div>
+                </div>
+
+                {/* クイック評価ボタン */}
+                <div className="flex gap-2 justify-center">
+                  {[20, 40, 60, 80, 100].map((value) => (
+                    <Button
+                      key={value}
+                      variant={userRating === value ? "default" : "outline"}
+                      size="sm"
+                      className="w-12"
+                      onClick={() => setUserRating(value)}
+                    >
+                      {value}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                「評価する」にチェックを入れると評価できます
+              </p>
+            )}
           </div>
 
           {/* User Note */}

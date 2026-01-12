@@ -497,3 +497,128 @@ export async function advancedSearchPlaces(
     hasMore: offset + limit < total,
   };
 }
+
+
+// ==================== Detailed Statistics Queries ====================
+
+export interface RatingDistribution {
+  range: string;
+  count: number;
+}
+
+export interface GenreStats {
+  genre: string;
+  count: number;
+  avgRating: number | null;
+}
+
+export interface VisitHistory {
+  id: number;
+  name: string;
+  visitedAt: Date;
+  userRating: number | null;
+  genre: string | null;
+}
+
+export async function getUserDetailedStats(userId: number): Promise<{
+  ratingDistribution: RatingDistribution[];
+  genreStats: GenreStats[];
+  visitHistory: VisitHistory[];
+  avgRating: number | null;
+  ratedCount: number;
+}> {
+  const db = await getDb();
+  if (!db) {
+    return {
+      ratingDistribution: [],
+      genreStats: [],
+      visitHistory: [],
+      avgRating: null,
+      ratedCount: 0,
+    };
+  }
+
+  // 評価分布（0-20, 21-40, 41-60, 61-80, 81-100）
+  const ratingDistribution: RatingDistribution[] = [];
+  const ranges = [
+    { label: '0-20', min: 0, max: 20 },
+    { label: '21-40', min: 21, max: 40 },
+    { label: '41-60', min: 41, max: 60 },
+    { label: '61-80', min: 61, max: 80 },
+    { label: '81-100', min: 81, max: 100 },
+  ];
+
+  for (const range of ranges) {
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(places)
+      .where(and(
+        eq(places.userId, userId),
+        sql`${places.userRating} >= ${range.min}`,
+        sql`${places.userRating} <= ${range.max}`
+      ));
+    ratingDistribution.push({
+      range: range.label,
+      count: result[0]?.count ?? 0,
+    });
+  }
+
+  // ジャンル別統計
+  const genreResults = await db.select({
+    genre: places.genreParent,
+    count: sql<number>`count(*)`,
+    avgRating: sql<number>`avg(${places.userRating})`,
+  })
+    .from(places)
+    .where(and(eq(places.userId, userId), sql`${places.genreParent} IS NOT NULL`))
+    .groupBy(places.genreParent);
+
+  const genreStats: GenreStats[] = genreResults.map(r => ({
+    genre: r.genre || 'その他',
+    count: r.count,
+    avgRating: r.avgRating ? Math.round(r.avgRating * 10) / 10 : null,
+  }));
+
+  // 訪問履歴（最新20件）
+  const visitResults = await db.select({
+    id: places.id,
+    name: places.name,
+    visitedAt: places.visitedAt,
+    userRating: places.userRating,
+    genre: places.genreParent,
+  })
+    .from(places)
+    .where(and(
+      eq(places.userId, userId),
+      eq(places.status, "visited"),
+      sql`${places.visitedAt} IS NOT NULL`
+    ))
+    .orderBy(sql`${places.visitedAt} DESC`)
+    .limit(20);
+
+  const visitHistory: VisitHistory[] = visitResults.map(r => ({
+    id: r.id,
+    name: r.name,
+    visitedAt: r.visitedAt!,
+    userRating: r.userRating,
+    genre: r.genre,
+  }));
+
+  // 平均評価と評価済み件数
+  const avgResult = await db.select({
+    avgRating: sql<number>`avg(${places.userRating})`,
+    count: sql<number>`count(*)`,
+  })
+    .from(places)
+    .where(and(eq(places.userId, userId), sql`${places.userRating} IS NOT NULL`));
+
+  const avgRating = avgResult[0]?.avgRating ? Math.round(avgResult[0].avgRating * 10) / 10 : null;
+  const ratedCount = avgResult[0]?.count ?? 0;
+
+  return {
+    ratingDistribution,
+    genreStats,
+    visitHistory,
+    avgRating,
+    ratedCount,
+  };
+}

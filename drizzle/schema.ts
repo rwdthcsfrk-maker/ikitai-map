@@ -53,7 +53,7 @@ export const places = mysqlTable("places", {
   photoUrl: text("photoUrl"),
   // User status and rating
   status: placeStatusEnum.default("none").notNull(),
-  userRating: int("userRating"), // 1-5 stars, null if not rated
+  userRating: int("userRating"), // 0-100 score, null if not rated
   userNote: text("userNote"), // User's personal note/review
   visitedAt: timestamp("visitedAt"), // When the user visited
   createdAt: timestamp("createdAt").defaultNow().notNull(),

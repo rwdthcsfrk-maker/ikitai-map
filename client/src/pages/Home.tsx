@@ -12,7 +12,6 @@ import {
   Plus,
   List,
   MapPin,
-  Star,
   ExternalLink,
   Loader2,
   UtensilsCrossed,
@@ -23,8 +22,17 @@ import {
   Filter,
   X,
   ChevronUp,
+  ChevronDown,
   Home as HomeIcon,
   User,
+  Coffee,
+  Utensils,
+  Wine,
+  Flame,
+  Soup,
+  IceCream,
+  Globe,
+  Beer,
 } from "lucide-react";
 import { toast } from "sonner";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
@@ -34,11 +42,31 @@ import {
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
-  DrawerTrigger,
 } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { PARENT_GENRES, BUDGET_BANDS, DISTANCE_OPTIONS } from "@shared/masters";
 
 type PlaceStatus = "none" | "want_to_go" | "visited";
+
+// ジャンルアイコンマッピング
+const genreIcons: Record<string, React.ReactNode> = {
+  cafe: <Coffee className="w-5 h-5" />,
+  japanese: <Utensils className="w-5 h-5" />,
+  western: <Utensils className="w-5 h-5" />,
+  chinese: <Soup className="w-5 h-5" />,
+  asian: <Globe className="w-5 h-5" />,
+  yakiniku: <Flame className="w-5 h-5" />,
+  izakaya: <Beer className="w-5 h-5" />,
+  ramen: <Soup className="w-5 h-5" />,
+  sweets: <IceCream className="w-5 h-5" />,
+};
 
 export default function Home() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
@@ -51,8 +79,14 @@ export default function Home() {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [isPlaceListOpen, setIsPlaceListOpen] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
+
+  // クイックフィルタ状態
+  const [selectedGenre, setSelectedGenre] = useState<string>("");
+  const [selectedDistance, setSelectedDistance] = useState<string>("");
+  const [selectedBudget, setSelectedBudget] = useState<string>("");
 
   const utils = trpc.useUtils();
   const { data: places, isLoading: placesLoading } = trpc.place.list.useQuery(undefined, {
@@ -88,7 +122,6 @@ export default function Home() {
           map.panTo({ lat: latitude, lng: longitude });
           map.setZoom(15);
 
-          // 現在地マーカーを更新
           if (currentLocationMarkerRef.current) {
             currentLocationMarkerRef.current.map = null;
           }
@@ -139,27 +172,59 @@ export default function Home() {
     );
   }, [map]);
 
+  // フィルタリングされた店舗
+  const filteredPlaces = places?.filter((place) => {
+    if (selectedGenre && place.genreParent !== selectedGenre) return false;
+    if (selectedBudget) {
+      const matchLunch = place.budgetLunch === selectedBudget;
+      const matchDinner = place.budgetDinner === selectedBudget;
+      if (!matchLunch && !matchDinner) return false;
+    }
+    // 距離フィルタは現在地がある場合のみ
+    if (selectedDistance && currentLocation && place.latitude && place.longitude) {
+      const distance = calculateDistance(
+        currentLocation.lat,
+        currentLocation.lng,
+        parseFloat(place.latitude),
+        parseFloat(place.longitude)
+      );
+      const maxDistance = parseInt(selectedDistance);
+      if (distance > maxDistance) return false;
+    }
+    return true;
+  });
+
+  // 距離計算（メートル）
+  function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
   // マーカーを配置
   useEffect(() => {
-    if (!map || !places) return;
+    if (!map || !filteredPlaces) return;
 
-    // 既存マーカーをクリア
     markersRef.current.forEach((marker) => (marker.map = null));
     markersRef.current = [];
 
-    places.forEach((place) => {
+    filteredPlaces.forEach((place) => {
       if (place.latitude && place.longitude) {
         const lat = parseFloat(place.latitude);
         const lng = parseFloat(place.longitude);
 
-        // ステータスに応じた色を設定
-        let pinColor = "#c53030"; // デフォルト（赤）
+        let pinColor = "#c53030";
         let emoji = "🍽";
         if (place.status === "want_to_go") {
-          pinColor = "#ec4899"; // ピンク（行きたい）
+          pinColor = "#ec4899";
           emoji = "❤️";
         } else if (place.status === "visited") {
-          pinColor = "#22c55e"; // 緑（訪問済み）
+          pinColor = "#22c55e";
           emoji = "✓";
         }
 
@@ -196,10 +261,9 @@ export default function Home() {
       }
     });
 
-    // 全マーカーが見えるようにズーム調整
-    if (places.length > 0 && markersRef.current.length > 0) {
+    if (filteredPlaces.length > 0 && markersRef.current.length > 0) {
       const bounds = new google.maps.LatLngBounds();
-      places.forEach((place) => {
+      filteredPlaces.forEach((place) => {
         if (place.latitude && place.longitude) {
           bounds.extend({
             lat: parseFloat(place.latitude),
@@ -209,7 +273,7 @@ export default function Home() {
       });
       map.fitBounds(bounds);
     }
-  }, [map, places]);
+  }, [map, filteredPlaces]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -230,6 +294,28 @@ export default function Home() {
     }
   };
 
+  const handleQuickFilter = () => {
+    const params = new URLSearchParams();
+    if (selectedGenre) params.set("genreParent", selectedGenre);
+    if (selectedBudget) params.set("budgetLunch", selectedBudget);
+    if (selectedDistance && currentLocation) {
+      params.set("distance", selectedDistance);
+      params.set("lat", currentLocation.lat.toString());
+      params.set("lng", currentLocation.lng.toString());
+    }
+    if (params.toString()) {
+      setLocation(`/filter?${params.toString()}`);
+    }
+  };
+
+  const clearFilters = () => {
+    setSelectedGenre("");
+    setSelectedDistance("");
+    setSelectedBudget("");
+  };
+
+  const hasActiveFilters = selectedGenre || selectedDistance || selectedBudget;
+
   const handleStatusChange = async (placeId: number, status: PlaceStatus) => {
     try {
       await updateStatusMutation.mutateAsync({ id: placeId, status });
@@ -245,7 +331,7 @@ export default function Home() {
     }
   };
 
-  const selectedPlaceData = places?.find((p) => p.id === selectedPlace);
+  const selectedPlaceData = filteredPlaces?.find((p) => p.id === selectedPlace);
 
   const getStatusIcon = (status: PlaceStatus) => {
     switch (status) {
@@ -269,6 +355,12 @@ export default function Home() {
     }
   };
 
+  // スコアを表示用にフォーマット
+  const formatScore = (score: number | null) => {
+    if (score === null) return null;
+    return score;
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -280,7 +372,6 @@ export default function Home() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
-        {/* Hero Section - スマホ最適化 */}
         <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
           <div className="text-center max-w-md mx-auto">
             <div className="flex items-center justify-center gap-3 mb-4">
@@ -318,14 +409,14 @@ export default function Home() {
                 <CardContent className="p-4 flex items-center gap-3">
                   <Search className="w-6 h-6 text-primary shrink-0" />
                   <div>
-                    <h3 className="font-semibold text-sm">自然言語で検索</h3>
-                    <p className="text-xs text-muted-foreground">「カップル向け イタリアン」で即検索</p>
+                    <h3 className="font-semibold text-sm">条件で検索</h3>
+                    <p className="text-xs text-muted-foreground">ジャンル・予算・距離で絞り込み</p>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            <Button size="lg" asChild className="w-full h-12 text-base">
+            <Button asChild size="lg" className="w-full h-14 text-base">
               <a href={getLoginUrl()}>ログインして始める</a>
             </Button>
           </div>
@@ -336,318 +427,299 @@ export default function Home() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Header - スマホ最適化 */}
-      <header className="border-b bg-card px-3 py-2 flex items-center gap-2 shrink-0 safe-area-top">
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <UtensilsCrossed className="w-4 h-4 text-primary-foreground" />
+      {/* ヘッダー - 検索バー */}
+      <header className="bg-background border-b px-3 py-2 safe-area-top">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shrink-0">
+            <UtensilsCrossed className="w-5 h-5 text-primary-foreground" />
           </div>
-        </div>
-
-        {/* Search Bar */}
-        <div className="flex-1 min-w-0">
-          <div className="relative">
+          <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              type="text"
               placeholder="カップル向け イタリアン..."
-              className="pl-9 pr-3 h-10 rounded-full text-sm"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="pl-9 pr-4 h-10 text-base"
             />
           </div>
-        </div>
-
-        {/* Filter Button */}
-        <Button variant="ghost" size="icon" className="shrink-0 h-10 w-10" asChild>
-          <Link href="/filter">
-            <Filter className="w-5 h-5" />
-          </Link>
-        </Button>
-      </header>
-
-      {/* Main Content */}
-      <div className="flex-1 relative overflow-hidden">
-        {/* Map */}
-        <MapView
-          onMapReady={handleMapReady}
-          className="w-full h-full"
-          initialCenter={{ lat: 35.6812, lng: 139.7671 }}
-          initialZoom={12}
-        />
-
-        {/* Map Controls - 右上 */}
-        <div className="absolute top-3 right-3 flex flex-col gap-2">
           <Button
-            variant="secondary"
+            variant="ghost"
             size="icon"
-            className="h-11 w-11 shadow-lg bg-card"
-            onClick={getCurrentLocation}
-            disabled={isLocating}
+            className="shrink-0"
+            onClick={() => setShowFilters(!showFilters)}
           >
-            {isLocating ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Navigation className="w-5 h-5" />
-            )}
+            <Filter className={`w-5 h-5 ${hasActiveFilters ? "text-primary" : ""}`} />
           </Button>
         </div>
 
-        {/* Place Count Badge - 左上 */}
-        {places && places.length > 0 && (
-          <div className="absolute top-3 left-3 bg-card/95 backdrop-blur-sm rounded-full px-3 py-2 shadow-lg">
-            <span className="text-sm font-medium">{places.length} 件</span>
-          </div>
-        )}
+        {/* クイックフィルタ */}
+        {showFilters && (
+          <div className="mt-3 space-y-2">
+            {/* ジャンル選択（横スクロール） */}
+            <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-hide">
+              <Button
+                variant={selectedGenre === "" ? "default" : "outline"}
+                size="sm"
+                className="shrink-0 h-9"
+                onClick={() => setSelectedGenre("")}
+              >
+                すべて
+              </Button>
+              {PARENT_GENRES.map((genre) => (
+                <Button
+                  key={genre.id}
+                  variant={selectedGenre === genre.id ? "default" : "outline"}
+                  size="sm"
+                  className="shrink-0 h-9 gap-1"
+                  onClick={() => setSelectedGenre(genre.id)}
+                >
+                  {genreIcons[genre.id] || <Utensils className="w-4 h-4" />}
+                  {genre.name}
+                </Button>
+              ))}
+            </div>
 
-        {/* Place List Drawer - スマホ用ボトムシート */}
-        <Drawer open={isPlaceListOpen} onOpenChange={setIsPlaceListOpen}>
-          <DrawerTrigger asChild>
+            {/* 距離・予算セレクト */}
+            <div className="flex gap-2">
+              <Select value={selectedDistance} onValueChange={setSelectedDistance}>
+                <SelectTrigger className="flex-1 h-10">
+                  <SelectValue placeholder="距離" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">距離指定なし</SelectItem>
+                  {DISTANCE_OPTIONS.filter(opt => opt.meters !== null).map((opt) => (
+                    <SelectItem key={opt.id} value={opt.meters?.toString() || ''}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={selectedBudget} onValueChange={setSelectedBudget}>
+                <SelectTrigger className="flex-1 h-10">
+                  <SelectValue placeholder="予算" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">予算指定なし</SelectItem>
+                  {BUDGET_BANDS.lunch.map((opt) => (
+                    <SelectItem key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {hasActiveFilters && (
+                <Button variant="ghost" size="icon" onClick={clearFilters} className="shrink-0">
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+
+            {/* 詳細検索ボタン */}
             <Button
-              variant="secondary"
-              className="absolute bottom-20 left-1/2 -translate-x-1/2 shadow-lg bg-card h-11 px-4 gap-2"
+              variant="outline"
+              className="w-full h-10"
+              onClick={handleQuickFilter}
             >
-              <ChevronUp className="w-4 h-4" />
-              店舗一覧
+              <Filter className="w-4 h-4 mr-2" />
+              詳細条件で検索
             </Button>
-          </DrawerTrigger>
-          <DrawerContent className="max-h-[70vh]">
-            <DrawerHeader className="border-b">
-              <DrawerTitle>保存した店舗 ({places?.length || 0}件)</DrawerTitle>
-            </DrawerHeader>
-            <ScrollArea className="flex-1 px-4">
-              <div className="py-4 space-y-3 pb-8">
-                {placesLoading ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : places && places.length > 0 ? (
-                  places.map((place) => (
-                    <Card
-                      key={place.id}
-                      className={`cursor-pointer active:scale-[0.98] transition-transform ${
-                        selectedPlace === place.id ? "ring-2 ring-primary" : ""
-                      }`}
-                      onClick={() => {
-                        setSelectedPlace(place.id);
-                        setIsPlaceListOpen(false);
-                        if (map && place.latitude && place.longitude) {
-                          map.panTo({
-                            lat: parseFloat(place.latitude),
-                            lng: parseFloat(place.longitude),
-                          });
-                          map.setZoom(16);
-                        }
-                      }}
-                    >
-                      <CardContent className="p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium text-base truncate">{place.name}</h4>
-                            <div className="flex items-center gap-2 mt-1">
-                              {place.genre && (
-                                <span className="text-xs bg-muted px-2 py-0.5 rounded">
-                                  {place.genre}
-                                </span>
-                              )}
-                              {place.userRating && (
-                                <span className="flex items-center gap-0.5 text-xs text-primary">
-                                  <Star className="w-3 h-3 fill-primary" />
-                                  {place.userRating}
-                                </span>
-                              )}
-                            </div>
-                            {place.summary && (
-                              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                                {place.summary}
-                              </p>
-                            )}
-                          </div>
-                          {getStatusIcon(place.status as PlaceStatus)}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <p className="text-sm">まだ店舗がありません</p>
-                    <Button variant="link" size="sm" asChild className="mt-2">
-                      <Link href="/add">店舗を追加する</Link>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-          </DrawerContent>
-        </Drawer>
-
-        {/* Selected Place Card - スマホ最適化 */}
-        {selectedPlaceData && (
-          <div className="absolute bottom-20 left-3 right-3">
-            <Card className="shadow-lg">
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-semibold text-base flex-1 truncate pr-2">
-                    {selectedPlaceData.name}
-                  </h3>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 h-8 w-8 -mr-2 -mt-1"
-                    onClick={() => setSelectedPlace(null)}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  {selectedPlaceData.genre && (
-                    <span className="text-xs bg-muted px-2 py-0.5 rounded">
-                      {selectedPlaceData.genre}
-                    </span>
-                  )}
-                  <span
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                      selectedPlaceData.status === "want_to_go"
-                        ? "bg-pink-100 text-pink-700"
-                        : selectedPlaceData.status === "visited"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-100 text-gray-600"
-                    }`}
-                  >
-                    {getStatusIcon(selectedPlaceData.status as PlaceStatus)}
-                    {getStatusLabel(selectedPlaceData.status as PlaceStatus)}
-                  </span>
-                </div>
-
-                {selectedPlaceData.summary && (
-                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                    {selectedPlaceData.summary}
-                  </p>
-                )}
-
-                {/* Status Buttons */}
-                <div className="flex gap-2 mb-3">
-                  <Button
-                    variant={selectedPlaceData.status === "want_to_go" ? "default" : "outline"}
-                    size="sm"
-                    className={`flex-1 h-10 ${
-                      selectedPlaceData.status === "want_to_go" ? "bg-pink-500 hover:bg-pink-600" : ""
-                    }`}
-                    onClick={() =>
-                      handleStatusChange(
-                        selectedPlaceData.id,
-                        selectedPlaceData.status === "want_to_go" ? "none" : "want_to_go"
-                      )
-                    }
-                  >
-                    <Heart
-                      className={`w-4 h-4 mr-1 ${
-                        selectedPlaceData.status === "want_to_go" ? "fill-white" : ""
-                      }`}
-                    />
-                    行きたい
-                  </Button>
-                  <Button
-                    variant={selectedPlaceData.status === "visited" ? "default" : "outline"}
-                    size="sm"
-                    className={`flex-1 h-10 ${
-                      selectedPlaceData.status === "visited" ? "bg-green-500 hover:bg-green-600" : ""
-                    }`}
-                    onClick={() =>
-                      handleStatusChange(
-                        selectedPlaceData.id,
-                        selectedPlaceData.status === "visited" ? "none" : "visited"
-                      )
-                    }
-                  >
-                    <Check className="w-4 h-4 mr-1" />
-                    訪問済み
-                  </Button>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 h-10"
-                    onClick={() => setDetailDialogOpen(true)}
-                  >
-                    詳細・評価
-                  </Button>
-                  {selectedPlaceData.googleMapsUrl && (
-                    <Button variant="outline" size="icon" className="h-10 w-10" asChild>
-                      <a
-                        href={selectedPlaceData.googleMapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
           </div>
         )}
+      </header>
+
+      {/* マップエリア */}
+      <div className="flex-1 relative">
+        <MapView onMapReady={handleMapReady} />
+
+        {/* 件数バッジ */}
+        <div className="absolute top-3 left-3 bg-background/95 backdrop-blur px-3 py-1.5 rounded-full shadow-lg text-sm font-medium">
+          {filteredPlaces?.length ?? 0} 件
+        </div>
+
+        {/* 現在地ボタン */}
+        <Button
+          variant="secondary"
+          size="icon"
+          className="absolute top-3 right-3 w-11 h-11 rounded-full shadow-lg"
+          onClick={getCurrentLocation}
+          disabled={isLocating}
+        >
+          {isLocating ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Navigation className="w-5 h-5" />
+          )}
+        </Button>
+
+        {/* 店舗一覧ボタン */}
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2">
+          <Button
+            variant="secondary"
+            className="rounded-full shadow-lg px-5 h-11"
+            onClick={() => setIsPlaceListOpen(true)}
+          >
+            <ChevronUp className="w-4 h-4 mr-2" />
+            店舗一覧
+          </Button>
+        </div>
       </div>
 
-      {/* Bottom Navigation - スマホ用 */}
-      <nav className="border-t bg-card px-2 py-2 safe-area-bottom">
-        <div className="flex items-center justify-around">
+      {/* 店舗一覧Drawer */}
+      <Drawer open={isPlaceListOpen} onOpenChange={setIsPlaceListOpen}>
+        <DrawerContent className="max-h-[85vh]">
+          <DrawerHeader className="pb-2">
+            <DrawerTitle className="flex items-center justify-between">
+              <span>保存した店舗 ({filteredPlaces?.length ?? 0}件)</span>
+              <Button variant="ghost" size="sm" onClick={() => setIsPlaceListOpen(false)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </DrawerTitle>
+          </DrawerHeader>
+          <ScrollArea className="flex-1 px-4 pb-4">
+            {placesLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : filteredPlaces && filteredPlaces.length > 0 ? (
+              <div className="space-y-3">
+                {filteredPlaces.map((place) => (
+                  <Card
+                    key={place.id}
+                    className={`cursor-pointer transition-all active:scale-[0.98] ${
+                      selectedPlace === place.id ? "ring-2 ring-primary" : ""
+                    }`}
+                    onClick={() => {
+                      setSelectedPlace(place.id);
+                      setIsPlaceListOpen(false);
+                      if (map && place.latitude && place.longitude) {
+                        map.panTo({
+                          lat: parseFloat(place.latitude),
+                          lng: parseFloat(place.longitude),
+                        });
+                        map.setZoom(16);
+                      }
+                    }}
+                  >
+                    <CardContent className="p-3">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            {getStatusIcon(place.status as PlaceStatus)}
+                            <h3 className="font-semibold text-sm truncate">{place.name}</h3>
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate mb-1">
+                            {place.genre || place.genreParent || "ジャンル未設定"}
+                            {place.address && ` · ${place.address.split(" ")[0]}`}
+                          </p>
+                          {place.summary && (
+                            <p className="text-xs text-muted-foreground line-clamp-2">{place.summary}</p>
+                          )}
+                          {place.userRating !== null && (
+                            <div className="mt-1 flex items-center gap-1">
+                              <span className="text-xs font-bold text-primary">{place.userRating}点</span>
+                              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-primary rounded-full"
+                                  style={{ width: `${place.userRating}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedPlace(place.id);
+                            setDetailDialogOpen(true);
+                          }}
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <MapPin className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
+                <p className="text-muted-foreground text-sm mb-4">
+                  {hasActiveFilters ? "条件に一致する店舗がありません" : "まだ店舗が保存されていません"}
+                </p>
+                {!hasActiveFilters && (
+                  <Button asChild size="sm">
+                    <Link href="/add">
+                      <Plus className="w-4 h-4 mr-1" />
+                      店舗を追加
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            )}
+          </ScrollArea>
+        </DrawerContent>
+      </Drawer>
+
+      {/* 店舗詳細ダイアログ */}
+      {selectedPlaceData && (
+        <>
+          <PlaceDetailDialog
+            place={selectedPlaceData}
+            open={detailDialogOpen}
+            onOpenChange={setDetailDialogOpen}
+            onEdit={() => {
+              setDetailDialogOpen(false);
+              setEditDialogOpen(true);
+            }}
+          />
+          <PlaceEditDialog
+            place={selectedPlaceData}
+            open={editDialogOpen}
+            onOpenChange={setEditDialogOpen}
+          />
+        </>
+      )}
+
+      {/* ボトムナビゲーション */}
+      <nav className="bg-background border-t safe-area-bottom">
+        <div className="flex items-center justify-around h-16">
           <Link href="/">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+            <button className="flex flex-col items-center gap-1 px-4 py-2 text-primary">
               <HomeIcon className="w-5 h-5" />
-              <span className="text-xs">ホーム</span>
-            </Button>
+              <span className="text-xs font-medium">ホーム</span>
+            </button>
           </Link>
-          <Link href="/filter">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+          <Link href="/search">
+            <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
               <Search className="w-5 h-5" />
               <span className="text-xs">検索</span>
-            </Button>
+            </button>
           </Link>
           <Link href="/add">
-            <Button variant="default" className="h-12 w-12 rounded-full shadow-lg">
+            <button className="flex flex-col items-center justify-center w-14 h-14 -mt-5 rounded-full bg-primary text-primary-foreground shadow-lg">
               <Plus className="w-6 h-6" />
-            </Button>
+            </button>
           </Link>
           <Link href="/lists">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+            <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
               <List className="w-5 h-5" />
               <span className="text-xs">リスト</span>
-            </Button>
+            </button>
           </Link>
-          <Link href="/lists">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
+          <Link href="/profile">
+            <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
               <User className="w-5 h-5" />
               <span className="text-xs">マイページ</span>
-            </Button>
+            </button>
           </Link>
         </div>
       </nav>
-
-      {/* Place Detail Dialog */}
-      {selectedPlaceData && (
-        <PlaceDetailDialog
-          place={selectedPlaceData}
-          open={detailDialogOpen}
-          onOpenChange={setDetailDialogOpen}
-          onEdit={() => setEditDialogOpen(true)}
-        />
-      )}
-
-      {/* Place Edit Dialog */}
-      {selectedPlaceData && (
-        <PlaceEditDialog
-          place={selectedPlaceData}
-          open={editDialogOpen}
-          onOpenChange={setEditDialogOpen}
-        />
-      )}
     </div>
   );
 }

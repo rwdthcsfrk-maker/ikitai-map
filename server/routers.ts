@@ -359,6 +359,10 @@ const userRouter = router({
   stats: protectedProcedure.query(async ({ ctx }) => {
     return db.getUserStats(ctx.user.id);
   }),
+
+  detailedStats: protectedProcedure.query(async ({ ctx }) => {
+    return db.getUserDetailedStats(ctx.user.id);
+  }),
 });
 
 // ==================== Master Router ====================
