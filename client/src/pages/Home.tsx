@@ -518,14 +518,16 @@ export default function Home() {
             </div>
 
             {/* 詳細検索ボタン */}
-            <Button
-              variant="outline"
-              className="w-full h-10"
-              onClick={handleQuickFilter}
-            >
-              <Filter className="w-4 h-4 mr-2" />
-              詳細条件で検索
-            </Button>
+            <Link href="/filter">
+              <Button
+                variant="outline"
+                className="w-full h-12 text-base"
+                type="button"
+              >
+                <Filter className="w-5 h-5 mr-2" />
+                詳細条件で検索
+              </Button>
+            </Link>
           </div>
         )}
       </header>
@@ -555,7 +557,7 @@ export default function Home() {
         </Button>
 
         {/* 店舗一覧ボタン */}
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2">
+        <div className="absolute bottom-24 left-1/2 -translate-x-1/2">
           <Button
             variant="secondary"
             className="rounded-full shadow-lg px-5 h-11"
@@ -593,14 +595,7 @@ export default function Home() {
                     }`}
                     onClick={() => {
                       setSelectedPlace(place.id);
-                      setIsPlaceListOpen(false);
-                      if (map && place.latitude && place.longitude) {
-                        map.panTo({
-                          lat: parseFloat(place.latitude),
-                          lng: parseFloat(place.longitude),
-                        });
-                        map.setZoom(16);
-                      }
+                      setDetailDialogOpen(true);
                     }}
                   >
                     <CardContent className="p-3">
@@ -702,7 +697,7 @@ export default function Home() {
             </button>
           </Link>
           <Link href="/add">
-            <button className="flex flex-col items-center justify-center w-14 h-14 -mt-5 rounded-full bg-primary text-primary-foreground shadow-lg">
+            <button className="flex flex-col items-center justify-center w-14 h-14 -mt-4 rounded-full bg-primary text-primary-foreground shadow-lg">
               <Plus className="w-6 h-6" />
             </button>
           </Link>
