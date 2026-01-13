@@ -38,7 +38,7 @@ import {
 import { Link } from "wouter";
 import { getLoginUrl } from "@/const";
 
-type SortOption = 'recommended' | 'distance' | 'rating' | 'reviews' | 'new';
+type SortOption = 'recommended' | 'distance' | 'rating' | 'reviews' | 'new' | 'trending';
 type BudgetType = 'lunch' | 'dinner';
 type StatusFilter = 'none' | 'want_to_go' | 'visited' | undefined;
 
@@ -71,18 +71,31 @@ export default function FilterSearch() {
   const { data: distancesData } = trpc.master.distances.useQuery();
   const { data: featuresData } = trpc.master.features.useQuery();
   const { data: sortOptionsData } = trpc.master.sortOptions.useQuery();
+
+  // 話題のお店を取得
+  const trendingQuery = trpc.advancedSearch.trending.useQuery(
+    {
+      area: filters.prefecture || undefined,
+      genre: filters.genreParent || undefined,
+      limit: 10,
+    },
+    {
+      enabled: isAuthenticated && filters.sort === 'trending',
+    }
+  );
   const { data: prefecturesData } = trpc.master.prefectures.useQuery();
 
   // Search query
   const searchQuery = trpc.advancedSearch.filter.useQuery(
     {
       ...filters,
+      sort: filters.sort === 'trending' ? 'recommended' : filters.sort,
       location: currentLocation || undefined,
       page,
       limit: 20,
     },
     {
-      enabled: isAuthenticated,
+      enabled: isAuthenticated && filters.sort !== 'trending',
     }
   );
 
@@ -590,17 +603,101 @@ export default function FilterSearch() {
                 {s.label}
               </SelectItem>
             ))}
+            <SelectItem value="trending">
+              🔥 話題のお店
+            </SelectItem>
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">
-          {searchQuery.data?.total || 0}件
+          {filters.sort === 'trending' 
+            ? `${trendingQuery.data?.places?.length || 0}件`
+            : `${searchQuery.data?.total || 0}件`
+          }
         </span>
       </div>
 
       {/* Results - スマホ最適化 */}
       <div className="flex-1 overflow-auto">
         <div className="px-4 py-3 pb-24">
-          {searchQuery.isLoading ? (
+          {/* 話題のお店表示 */}
+          {filters.sort === 'trending' ? (
+            trendingQuery.isLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : trendingQuery.data?.places?.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground mb-4">話題のお店が見つかりませんでした</p>
+                <Button variant="outline" onClick={() => setFilters({ sort: 'recommended' })}>
+                  おすすめに切り替え
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* 話題のお店の説明 */}
+                <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950/30 dark:to-red-950/30 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xl">🔥</span>
+                    <h3 className="font-semibold">SNSで話題のお店</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    TikTokやYouTubeで今話題のレストラン情報を表示しています
+                  </p>
+                  {trendingQuery.data?.searchQuery && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      検索: {trendingQuery.data.searchQuery}
+                    </p>
+                  )}
+                </div>
+
+                {trendingQuery.data?.places?.map((place, index) => (
+                  <Card key={index} className="overflow-hidden active:scale-[0.98] transition-transform">
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge 
+                              variant="outline" 
+                              className={`text-xs ${
+                                place.source === 'TikTok' 
+                                  ? 'border-pink-500 text-pink-500' 
+                                  : 'border-red-500 text-red-500'
+                              }`}
+                            >
+                              {place.source}
+                            </Badge>
+                          </div>
+                          <h3 className="font-semibold text-base line-clamp-2 mb-1">
+                            {place.name}
+                          </h3>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {place.description}
+                          </p>
+                          {place.engagement > 0 && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              👁 {place.engagement.toLocaleString()}回視聴
+                            </p>
+                          )}
+                        </div>
+                        {place.sourceUrl && (
+                          <a
+                            href={place.sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0"
+                          >
+                            <Button variant="ghost" size="icon" className="h-10 w-10">
+                              <ExternalLink className="h-5 w-5" />
+                            </Button>
+                          </a>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )
+          ) : searchQuery.isLoading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>

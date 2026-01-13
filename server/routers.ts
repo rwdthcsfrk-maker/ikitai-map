@@ -402,6 +402,91 @@ const advancedSearchRouter = router({
     .query(async ({ ctx, input }) => {
       return db.advancedSearchPlaces(ctx.user.id, input);
     }),
+
+  // 話題のお店を取得（SNS/ネットで話題のレストランを検索）
+  trending: protectedProcedure
+    .input(z.object({
+      area: z.string().optional(), // エリア（渋谷、新宿など）
+      genre: z.string().optional(), // ジャンル（イタリアン、和食など）
+      limit: z.number().optional().default(10),
+    }))
+    .query(async ({ ctx, input }) => {
+      const { callDataApi } = await import("./_core/dataApi");
+      
+      // 検索キーワードを構築
+      const keywords: string[] = [];
+      if (input.area) keywords.push(input.area);
+      if (input.genre) keywords.push(input.genre);
+      keywords.push("話題", "人気", "レストラン");
+      const searchQuery = keywords.join(" ");
+
+      try {
+        // TikTokで話題のレストランを検索
+        const tiktokResult = await callDataApi("Tiktok/search_tiktok_video_general", {
+          query: { keyword: searchQuery },
+        }) as { data?: Array<{ desc?: string; author?: { nickname?: string }; stats?: { playCount?: number; diggCount?: number } }> };
+
+        // YouTubeで話題のレストランを検索
+        const youtubeResult = await callDataApi("Youtube/search", {
+          query: { q: searchQuery, hl: "ja", gl: "JP" },
+        }) as { contents?: Array<{ type?: string; video?: { title?: string; channelTitle?: string; viewCountText?: string; videoId?: string } }> };
+
+        // 結果を整形
+        const trendingPlaces: Array<{
+          name: string;
+          source: string;
+          description: string;
+          engagement: number;
+          sourceUrl?: string;
+        }> = [];
+
+        // TikTokの結果から店舗名を抽出
+        if (tiktokResult?.data && Array.isArray(tiktokResult.data)) {
+          for (const video of tiktokResult.data.slice(0, 5)) {
+            if (video.desc) {
+              trendingPlaces.push({
+                name: video.desc.slice(0, 50),
+                source: "TikTok",
+                description: video.desc,
+                engagement: (video.stats?.playCount || 0) + (video.stats?.diggCount || 0),
+              });
+            }
+          }
+        }
+
+        // YouTubeの結果から店舗情報を抽出
+        if (youtubeResult?.contents && Array.isArray(youtubeResult.contents)) {
+          for (const content of youtubeResult.contents.slice(0, 5)) {
+            if (content.type === "video" && content.video) {
+              trendingPlaces.push({
+                name: content.video.title || "",
+                source: "YouTube",
+                description: `${content.video.channelTitle || ""} - ${content.video.viewCountText || ""}回視聴`,
+                engagement: parseInt(content.video.viewCountText?.replace(/[^0-9]/g, "") || "0"),
+                sourceUrl: content.video.videoId ? `https://youtube.com/watch?v=${content.video.videoId}` : undefined,
+              });
+            }
+          }
+        }
+
+        // エンゲージメント順にソート
+        trendingPlaces.sort((a, b) => b.engagement - a.engagement);
+
+        return {
+          places: trendingPlaces.slice(0, input.limit),
+          searchQuery,
+          sources: ["TikTok", "YouTube"],
+        };
+      } catch (error) {
+        console.error("Trending search error:", error);
+        return {
+          places: [],
+          searchQuery,
+          sources: [],
+          error: "話題のお店の取得に失敗しました",
+        };
+      }
+    }),
 });
 
 // ==================== Main Router ====================
