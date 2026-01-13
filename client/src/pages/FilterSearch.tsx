@@ -34,7 +34,10 @@ import {
   CheckCircle,
   SlidersHorizontal,
   ChevronRight,
+  Plus,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Link } from "wouter";
 import { getLoginUrl } from "@/const";
 
@@ -98,6 +101,33 @@ export default function FilterSearch() {
       enabled: isAuthenticated && filters.sort !== 'trending',
     }
   );
+
+  // 話題のお店をリストに追加するmutation
+  const addPlaceMutation = trpc.place.create.useMutation({
+    onSuccess: () => {
+      toast.success("行きたいリストに追加しました");
+    },
+    onError: () => {
+      toast.error("追加に失敗しました");
+    },
+  });
+
+  // 話題のお店を追加するハンドラ
+  const handleAddTrendingPlace = (place: {
+    name: string;
+    source: string;
+    description: string;
+    sourceUrl?: string;
+    thumbnailUrl?: string;
+  }) => {
+    addPlaceMutation.mutate({
+      name: place.name,
+      summary: place.description,
+      source: `${place.source}で話題`,
+      googleMapsUrl: place.sourceUrl,
+      photoUrl: place.thumbnailUrl,
+    });
+  };
 
   // Get current location
   const handleGetLocation = () => {
@@ -652,45 +682,89 @@ export default function FilterSearch() {
 
                 {trendingQuery.data?.places?.map((place, index) => (
                   <Card key={index} className="overflow-hidden active:scale-[0.98] transition-transform">
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge 
-                              variant="outline" 
-                              className={`text-xs ${
-                                place.source === 'TikTok' 
-                                  ? 'border-pink-500 text-pink-500' 
-                                  : 'border-red-500 text-red-500'
-                              }`}
-                            >
-                              {place.source}
-                            </Badge>
-                          </div>
-                          <h3 className="font-semibold text-base line-clamp-2 mb-1">
-                            {place.name}
-                          </h3>
-                          <p className="text-sm text-muted-foreground line-clamp-2">
-                            {place.description}
-                          </p>
-                          {place.engagement > 0 && (
-                            <p className="text-xs text-muted-foreground mt-2">
-                              👁 {place.engagement.toLocaleString()}回視聴
+                    <CardContent className="p-0">
+                      {/* サムネイル表示 */}
+                      {place.thumbnailUrl && (
+                        <div className="relative w-full aspect-video bg-muted">
+                          <img
+                            src={place.thumbnailUrl}
+                            alt={place.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                          <Badge 
+                            variant="secondary" 
+                            className={`absolute top-2 left-2 text-xs ${
+                              place.source === 'TikTok' 
+                                ? 'bg-pink-500 text-white' 
+                                : 'bg-red-500 text-white'
+                            }`}
+                          >
+                            {place.source}
+                          </Badge>
+                        </div>
+                      )}
+                      <div className="p-4">
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            {!place.thumbnailUrl && (
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${
+                                    place.source === 'TikTok' 
+                                      ? 'border-pink-500 text-pink-500' 
+                                      : 'border-red-500 text-red-500'
+                                  }`}
+                                >
+                                  {place.source}
+                                </Badge>
+                              </div>
+                            )}
+                            <h3 className="font-semibold text-base line-clamp-2 mb-1">
+                              {place.name}
+                            </h3>
+                            <p className="text-sm text-muted-foreground line-clamp-2">
+                              {place.description}
                             </p>
+                            {place.engagement > 0 && (
+                              <p className="text-xs text-muted-foreground mt-2">
+                                👁 {place.engagement.toLocaleString()}回視聴
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {/* アクションボタン */}
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="flex-1 h-9"
+                            onClick={() => handleAddTrendingPlace(place)}
+                            disabled={addPlaceMutation.isPending}
+                          >
+                            {addPlaceMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                            ) : (
+                              <Plus className="h-4 w-4 mr-1" />
+                            )}
+                            行きたいに追加
+                          </Button>
+                          {place.sourceUrl && (
+                            <a
+                              href={place.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Button variant="outline" size="sm" className="h-9">
+                                <ExternalLink className="h-4 w-4 mr-1" />
+                                動画を見る
+                              </Button>
+                            </a>
                           )}
                         </div>
-                        {place.sourceUrl && (
-                          <a
-                            href={place.sourceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="shrink-0"
-                          >
-                            <Button variant="ghost" size="icon" className="h-10 w-10">
-                              <ExternalLink className="h-5 w-5" />
-                            </Button>
-                          </a>
-                        )}
                       </div>
                     </CardContent>
                   </Card>

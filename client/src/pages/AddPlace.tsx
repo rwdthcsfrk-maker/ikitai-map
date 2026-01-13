@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MapView } from "@/components/Map";
 import { trpc } from "@/lib/trpc";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
   ArrowLeft,
@@ -96,6 +96,30 @@ export default function AddPlace() {
     setMap(mapInstance);
     placesServiceRef.current = new google.maps.places.PlacesService(mapInstance);
   }, []);
+
+  const centerMapOnCurrentLocation = useCallback(() => {
+    if (!map || !navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        map.panTo({ lat: latitude, lng: longitude });
+        map.setZoom(14);
+      },
+      () => {
+        // Ignore geolocation errors to keep the default center.
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  }, [map]);
+
+  useEffect(() => {
+    centerMapOnCurrentLocation();
+  }, [centerMapOnCurrentLocation]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim() || !placesServiceRef.current || !map) return;

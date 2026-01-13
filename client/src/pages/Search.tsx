@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import {
   ArrowLeft,
@@ -22,6 +22,7 @@ import {
   List,
   User,
   Filter,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,6 +42,30 @@ const STATUS_OPTIONS = [
 ] as const;
 
 type PlaceStatus = "none" | "want_to_go" | "visited";
+type LatLng = { lat: number; lng: number };
+
+const EARTH_RADIUS_KM = 6371;
+
+const getDistanceKm = (from: LatLng, to: LatLng) => {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRad(to.lat - from.lat);
+  const dLng = toRad(to.lng - from.lng);
+  const lat1 = toRad(from.lat);
+  const lat2 = toRad(to.lat);
+
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_RADIUS_KM * c;
+};
+
+const formatDistance = (distanceKm: number) => {
+  if (distanceKm < 1) {
+    const meters = Math.round(distanceKm * 1000);
+    return `${meters}m`;
+  }
+  return `${distanceKm.toFixed(1)}km`;
+};
 
 export default function Search() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -57,9 +82,11 @@ export default function Search() {
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>(initialFeatures);
   const [selectedStatus, setSelectedStatus] = useState<PlaceStatus | undefined>(initialStatus);
   const [isSearching, setIsSearching] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
+  const [sortByDistance, setSortByDistance] = useState(false);
 
   const parseSearchMutation = trpc.ai.parseSearchQuery.useMutation();
-
+  const trendingQuery = (initialGenre || initialQuery).trim();
   const { data: searchResults, isLoading } = trpc.place.search.useQuery(
     {
       query: initialGenre || initialQuery,
@@ -71,6 +98,57 @@ export default function Search() {
         isAuthenticated && (!!initialQuery || selectedFeatures.length > 0 || !!selectedStatus),
     }
   );
+  const { data: trendingPlaces, isLoading: trendingLoading } = trpc.place.trending.useQuery(
+    {
+      query: trendingQuery ? trendingQuery : undefined,
+      location: currentLocation ?? undefined,
+    },
+    {
+      enabled: isAuthenticated,
+    }
+  );
+
+  useEffect(() => {
+    if (!navigator.geolocation || currentLocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      () => {
+        setCurrentLocation(null);
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 10 * 60 * 1000,
+      }
+    );
+  }, [currentLocation]);
+
+  const sortedSearchResults = useMemo(() => {
+    if (!searchResults) return searchResults;
+    if (!sortByDistance || !currentLocation) return searchResults;
+    const withDistance = searchResults
+      .map((place) => {
+        const lat = place.latitude ? parseFloat(place.latitude) : null;
+        const lng = place.longitude ? parseFloat(place.longitude) : null;
+        const distance = lat !== null && lng !== null
+          ? getDistanceKm(currentLocation, { lat, lng })
+          : null;
+        return { place, distance };
+      })
+      .sort((a, b) => {
+        if (a.distance === null && b.distance === null) return 0;
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      })
+      .map(({ place }) => place);
+    return withDistance;
+  }, [searchResults, sortByDistance, currentLocation]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -272,80 +350,174 @@ export default function Search() {
 
       {/* Results */}
       <main className="flex-1 px-4 py-4 pb-24 overflow-y-auto">
+        {(trendingLoading || (trendingPlaces && trendingPlaces.length > 0)) && (
+          <section className="mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <TrendingUp className="w-4 h-4 text-orange-500" />
+                最近話題のお店
+              </div>
+              {trendingQuery && (
+                <span className="text-xs text-muted-foreground">
+                  「{trendingQuery}」周辺
+                </span>
+              )}
+            </div>
+            {trendingLoading ? (
+              <div className="flex justify-center py-6">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {trendingPlaces?.map((place) => (
+                  <Card key={place.placeId} className="active:scale-[0.98] transition-transform">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm truncate">{place.name}</h3>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 flex-wrap">
+                            {place.rating && (
+                              <span className="flex items-center gap-0.5">
+                                <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                {place.rating}
+                              </span>
+                            )}
+                            {place.userRatingsTotal && (
+                              <span className="flex items-center gap-0.5">
+                                <TrendingUp className="w-3 h-3 text-orange-500" />
+                                {place.userRatingsTotal.toLocaleString()} 口コミ
+                              </span>
+                            )}
+                            {place.address && (
+                              <span className="flex items-center gap-1 truncate">
+                                <MapPin className="w-3 h-3" />
+                                {place.address}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {place.googleMapsUrl && (
+                          <Button variant="ghost" size="icon" className="shrink-0 h-10 w-10" asChild>
+                            <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
-        ) : searchResults && searchResults.length > 0 ? (
+        ) : sortedSearchResults && sortedSearchResults.length > 0 ? (
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">{searchResults.length} 件の店舗</p>
-            {searchResults.map((place) => (
-              <Card key={place.id} className="active:scale-[0.98] transition-transform">
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-base truncate">{place.name}</h3>
-                        {getStatusIcon(place.status as PlaceStatus)}
-                      </div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {sortedSearchResults.length} 件の店舗
+              </p>
+              <Button
+                variant={sortByDistance ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSortByDistance((prev) => !prev)}
+                disabled={!currentLocation}
+              >
+                近い順
+              </Button>
+            </div>
+            {sortedSearchResults.map((place) => {
+              const lat = place.latitude ? parseFloat(place.latitude) : null;
+              const lng = place.longitude ? parseFloat(place.longitude) : null;
+              const distance = currentLocation && lat !== null && lng !== null
+                ? getDistanceKm(currentLocation, { lat, lng })
+                : null;
+              return (
+                <Card key={place.id} className="active:scale-[0.98] transition-transform">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-base truncate">{place.name}</h3>
+                          {getStatusIcon(place.status as PlaceStatus)}
+                        </div>
 
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        {place.genre && (
-                          <span className="text-xs bg-muted px-2 py-0.5 rounded">{place.genre}</span>
-                        )}
-                        {place.userRating && (
-                          <span className="flex items-center gap-0.5 text-xs text-primary">
-                            <Star className="w-3 h-3 fill-primary" />
-                            {place.userRating}
-                          </span>
-                        )}
-                      </div>
-
-                      {place.summary && (
-                        <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-                          {place.summary}
-                        </p>
-                      )}
-
-                      {place.features && place.features.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {place.features.slice(0, 3).map((feature, i) => (
-                            <span
-                              key={i}
-                              className={`text-xs px-2 py-0.5 rounded-full border ${
-                                selectedFeatures.includes(feature)
-                                  ? "bg-primary/10 border-primary text-primary"
-                                  : "bg-muted border-transparent"
-                              }`}
-                            >
-                              {feature}
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          {place.genre && (
+                            <span className="text-xs bg-muted px-2 py-0.5 rounded">{place.genre}</span>
+                          )}
+                          {place.rating && (
+                            <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
+                              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                              {place.rating}
                             </span>
-                          ))}
-                          {place.features.length > 3 && (
+                          )}
+                          {place.userRating && (
+                            <span className="flex items-center gap-0.5 text-xs text-primary">
+                              <Star className="w-3 h-3 fill-primary" />
+                              {place.userRating}
+                            </span>
+                          )}
+                          {distance !== null && (
                             <span className="text-xs text-muted-foreground">
-                              +{place.features.length - 3}
+                              現在地から{formatDistance(distance)}
                             </span>
                           )}
                         </div>
-                      )}
 
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <MapPin className="w-3 h-3" />
-                        <span className="truncate">{place.address}</span>
+                        {place.summary && (
+                          <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+                            {place.summary}
+                          </p>
+                        )}
+
+                        {place.features && place.features.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {place.features.slice(0, 3).map((feature, i) => (
+                              <span
+                                key={i}
+                                className={`text-xs px-2 py-0.5 rounded-full border ${
+                                  selectedFeatures.includes(feature)
+                                    ? "bg-primary/10 border-primary text-primary"
+                                    : "bg-muted border-transparent"
+                                }`}
+                              >
+                                {feature}
+                              </span>
+                            ))}
+                            {place.features.length > 3 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{place.features.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {place.address && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <MapPin className="w-3 h-3" />
+                            <span className="truncate">{place.address}</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
 
-                    {place.googleMapsUrl && (
-                      <Button variant="ghost" size="icon" className="shrink-0 h-10 w-10" asChild>
-                        <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                      {place.googleMapsUrl && (
+                        <Button variant="ghost" size="icon" className="shrink-0 h-10 w-10" asChild>
+                          <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         ) : initialQuery || selectedFeatures.length > 0 || selectedStatus ? (
           <div className="text-center py-12">

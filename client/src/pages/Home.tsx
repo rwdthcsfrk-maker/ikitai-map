@@ -105,9 +105,12 @@ export default function Home() {
   }, []);
 
   // 現在地を取得
-  const getCurrentLocation = useCallback(() => {
+  const getCurrentLocation = useCallback((options?: { showToast?: boolean }) => {
+    const showToast = options?.showToast ?? true;
     if (!navigator.geolocation) {
-      toast.error("お使いのブラウザは位置情報に対応していません");
+      if (showToast) {
+        toast.error("お使いのブラウザは位置情報に対応していません");
+      }
       return;
     }
 
@@ -146,22 +149,26 @@ export default function Home() {
           });
         }
 
-        toast.success("現在地を取得しました");
+        if (showToast) {
+          toast.success("現在地を取得しました");
+        }
       },
       (error) => {
         setIsLocating(false);
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            toast.error("位置情報の取得が許可されていません");
-            break;
-          case error.POSITION_UNAVAILABLE:
-            toast.error("位置情報を取得できませんでした");
-            break;
-          case error.TIMEOUT:
-            toast.error("位置情報の取得がタイムアウトしました");
-            break;
-          default:
-            toast.error("位置情報の取得に失敗しました");
+        if (showToast) {
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              toast.error("位置情報の取得が許可されていません");
+              break;
+            case error.POSITION_UNAVAILABLE:
+              toast.error("位置情報を取得できませんでした");
+              break;
+            case error.TIMEOUT:
+              toast.error("位置情報の取得がタイムアウトしました");
+              break;
+            default:
+              toast.error("位置情報の取得に失敗しました");
+          }
         }
       },
       {
@@ -171,6 +178,11 @@ export default function Home() {
       }
     );
   }, [map]);
+
+  useEffect(() => {
+    if (!map || currentLocation) return;
+    getCurrentLocation({ showToast: false });
+  }, [map, currentLocation, getCurrentLocation]);
 
   // フィルタリングされた店舗
   const filteredPlaces = places?.filter((place) => {
@@ -546,7 +558,7 @@ export default function Home() {
           variant="secondary"
           size="icon"
           className="absolute top-3 right-3 w-11 h-11 rounded-full shadow-lg"
-          onClick={getCurrentLocation}
+          onClick={() => getCurrentLocation()}
           disabled={isLocating}
         >
           {isLocating ? (

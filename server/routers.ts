@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { invokeLLM } from "./_core/llm";
+import { makeRequest, PlacesSearchResult } from "./_core/map";
 import * as db from "./db";
 import { PARENT_GENRES, CHILD_GENRES, BUDGET_BANDS, DISTANCE_OPTIONS, FEATURE_OPTIONS, SORT_OPTIONS, PREFECTURES } from "@shared/masters";
 
@@ -118,6 +119,68 @@ const placeRouter = router({
       }
       await db.deletePlace(input.id);
       return { success: true };
+    }),
+
+  trending: protectedProcedure
+    .input(z.object({
+      query: z.string().optional(),
+      location: z.object({
+        lat: z.number(),
+        lng: z.number(),
+      }).optional(),
+      radius: z.number().min(500).max(50000).optional(),
+      limit: z.number().min(1).max(20).optional(),
+    }))
+    .query(async ({ input }) => {
+      const searchQuery = input.query?.trim()
+        ? `${input.query} 話題 人気`
+        : "話題の店";
+      const params: Record<string, unknown> = {
+        query: searchQuery,
+        language: "ja",
+        region: "jp",
+      };
+
+      if (input.location) {
+        params.location = `${input.location.lat},${input.location.lng}`;
+        params.radius = input.radius ?? 3000;
+      }
+
+      let response: PlacesSearchResult | null = null;
+      try {
+        response = await makeRequest<PlacesSearchResult>("/maps/api/place/textsearch/json", params);
+      } catch (error) {
+        console.warn("[Place] Trending search failed:", error);
+        return [];
+      }
+
+      if (!response || (response.status !== "OK" && response.status !== "ZERO_RESULTS")) {
+        console.warn("[Place] Trending search returned status:", response?.status);
+        return [];
+      }
+
+      const scored = (response.results ?? [])
+        .map(place => {
+          const rating = place.rating ?? 0;
+          const ratingsTotal = place.user_ratings_total ?? 0;
+          const trendScore = rating * Math.log10(ratingsTotal + 1);
+          return {
+            placeId: place.place_id,
+            name: place.name,
+            address: place.formatted_address,
+            rating: place.rating ?? null,
+            userRatingsTotal: place.user_ratings_total ?? null,
+            latitude: place.geometry.location.lat,
+            longitude: place.geometry.location.lng,
+            googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
+            trendScore,
+          };
+        })
+        .sort((a, b) => b.trendScore - a.trendScore)
+        .slice(0, input.limit ?? 6)
+        .map(({ trendScore, ...place }) => place);
+
+      return scored;
     }),
 
   search: protectedProcedure
@@ -424,12 +487,27 @@ const advancedSearchRouter = router({
         // TikTokで話題のレストランを検索
         const tiktokResult = await callDataApi("Tiktok/search_tiktok_video_general", {
           query: { keyword: searchQuery },
-        }) as { data?: Array<{ desc?: string; author?: { nickname?: string }; stats?: { playCount?: number; diggCount?: number } }> };
+        }) as { data?: Array<{ 
+          desc?: string; 
+          author?: { nickname?: string }; 
+          stats?: { playCount?: number; diggCount?: number };
+          video?: { cover?: string; id?: string };
+          aweme_id?: string;
+        }> };
 
         // YouTubeで話題のレストランを検索
         const youtubeResult = await callDataApi("Youtube/search", {
           query: { q: searchQuery, hl: "ja", gl: "JP" },
-        }) as { contents?: Array<{ type?: string; video?: { title?: string; channelTitle?: string; viewCountText?: string; videoId?: string } }> };
+        }) as { contents?: Array<{ 
+          type?: string; 
+          video?: { 
+            title?: string; 
+            channelTitle?: string; 
+            viewCountText?: string; 
+            videoId?: string;
+            thumbnails?: Array<{ url?: string; width?: number; height?: number }>;
+          } 
+        }> };
 
         // 結果を整形
         const trendingPlaces: Array<{
@@ -438,6 +516,7 @@ const advancedSearchRouter = router({
           description: string;
           engagement: number;
           sourceUrl?: string;
+          thumbnailUrl?: string;
         }> = [];
 
         // TikTokの結果から店舗名を抽出
@@ -449,6 +528,8 @@ const advancedSearchRouter = router({
                 source: "TikTok",
                 description: video.desc,
                 engagement: (video.stats?.playCount || 0) + (video.stats?.diggCount || 0),
+                sourceUrl: video.aweme_id ? `https://www.tiktok.com/@${video.author?.nickname || 'user'}/video/${video.aweme_id}` : undefined,
+                thumbnailUrl: video.video?.cover || undefined,
               });
             }
           }
@@ -458,12 +539,18 @@ const advancedSearchRouter = router({
         if (youtubeResult?.contents && Array.isArray(youtubeResult.contents)) {
           for (const content of youtubeResult.contents.slice(0, 5)) {
             if (content.type === "video" && content.video) {
+              // YouTubeサムネイルは標準フォーマットで取得
+              const thumbnailUrl = content.video.videoId 
+                ? `https://img.youtube.com/vi/${content.video.videoId}/mqdefault.jpg`
+                : content.video.thumbnails?.[0]?.url;
+              
               trendingPlaces.push({
                 name: content.video.title || "",
                 source: "YouTube",
                 description: `${content.video.channelTitle || ""} - ${content.video.viewCountText || ""}回視聴`,
                 engagement: parseInt(content.video.viewCountText?.replace(/[^0-9]/g, "") || "0"),
                 sourceUrl: content.video.videoId ? `https://youtube.com/watch?v=${content.video.videoId}` : undefined,
+                thumbnailUrl,
               });
             }
           }
