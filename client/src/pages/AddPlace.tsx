@@ -22,6 +22,7 @@ import {
   Filter,
   ChevronUp,
   X,
+  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -46,6 +47,19 @@ interface PlaceResult {
   photoUrl?: string;
 }
 
+type LatLng = { lat: number; lng: number };
+
+interface TrendingPlace {
+  placeId: string;
+  name: string;
+  address: string;
+  rating?: number | null;
+  userRatingsTotal?: number | null;
+  latitude: number;
+  longitude: number;
+  googleMapsUrl: string;
+}
+
 export default function AddPlace() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -57,6 +71,7 @@ export default function AddPlace() {
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [isResultsOpen, setIsResultsOpen] = useState(false);
   const [isSaveDrawerOpen, setIsSaveDrawerOpen] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
@@ -64,6 +79,15 @@ export default function AddPlace() {
   const { data: lists } = trpc.list.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const { data: trendingPlaces, isLoading: trendingLoading } = trpc.place.trending.useQuery(
+    {
+      location: currentLocation ?? undefined,
+      limit: 8,
+    },
+    {
+      enabled: isAuthenticated,
+    }
+  );
 
   const createPlaceMutation = trpc.place.create.useMutation({
     onSuccess: (place) => {
@@ -103,10 +127,12 @@ export default function AddPlace() {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
+        setCurrentLocation({ lat: latitude, lng: longitude });
         map.panTo({ lat: latitude, lng: longitude });
         map.setZoom(14);
       },
       () => {
+        setCurrentLocation(null);
         // Ignore geolocation errors to keep the default center.
       },
       {
@@ -203,6 +229,24 @@ export default function AddPlace() {
     },
     [map]
   );
+
+  const toPlaceResultFromTrending = (place: TrendingPlace): PlaceResult => ({
+    placeId: place.placeId,
+    name: place.name,
+    address: place.address,
+    lat: place.latitude,
+    lng: place.longitude,
+    rating: place.rating ?? undefined,
+  });
+
+  const handleSelectTrendingPlace = (place: TrendingPlace) => {
+    handleSelectPlace(toPlaceResultFromTrending(place));
+  };
+
+  const handleAddTrendingPlace = (place: TrendingPlace) => {
+    handleSelectPlace(toPlaceResultFromTrending(place));
+    setIsSaveDrawerOpen(true);
+  };
 
   const handleSave = async () => {
     if (!selectedPlace) return;
@@ -321,6 +365,82 @@ export default function AddPlace() {
           initialCenter={{ lat: 35.6812, lng: 139.7671 }}
           initialZoom={12}
         />
+
+        {/* Recommended Places */}
+        {!selectedPlace && (
+          <div className="absolute top-3 left-3 right-3 z-10">
+            <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-50 to-orange-50/80 dark:from-amber-950/40 dark:to-orange-950/30">
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-9 w-9 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-sm">
+                      <TrendingUp className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">おすすめの店</p>
+                      <p className="text-xs text-muted-foreground">
+                        {currentLocation ? "近くで人気のお店" : "人気のお店をピックアップ"}
+                      </p>
+                    </div>
+                  </div>
+                  {trendingLoading && (
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                  {(trendingPlaces || []).map((place) => (
+                    <Card
+                      key={place.placeId}
+                      className="w-52 shrink-0 border bg-background/80 cursor-pointer active:scale-[0.98] transition-transform"
+                      onClick={() => handleSelectTrendingPlace(place)}
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-start gap-2">
+                          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                            <MapPin className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{place.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {place.address}
+                            </p>
+                            {place.rating && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                <span className="text-xs font-medium">{place.rating}</span>
+                                {place.userRatingsTotal && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    ({place.userRatingsTotal})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="w-full h-8 mt-2"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleAddTrendingPlace(place);
+                          }}
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          追加
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {!trendingLoading && (!trendingPlaces || trendingPlaces.length === 0) && (
+                    <div className="text-xs text-muted-foreground px-2 py-3">
+                      近くのおすすめが見つかりませんでした
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Search Results Button */}
         {searchResults.length > 0 && !isResultsOpen && (
