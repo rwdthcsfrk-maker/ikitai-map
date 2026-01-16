@@ -119,14 +119,39 @@ export default function FilterSearch() {
     description: string;
     sourceUrl?: string;
     thumbnailUrl?: string;
+    placeInfo?: {
+      placeId: string;
+      name: string;
+      address: string;
+      rating?: number;
+      latitude: number;
+      longitude: number;
+      googleMapsUrl: string;
+    };
   }) => {
-    addPlaceMutation.mutate({
-      name: place.name,
-      summary: place.description,
-      source: `${place.source}で話題`,
-      googleMapsUrl: place.sourceUrl,
-      photoUrl: place.thumbnailUrl,
-    });
+    // Google Places情報があればそれを使用
+    if (place.placeInfo) {
+      addPlaceMutation.mutate({
+        googlePlaceId: place.placeInfo.placeId,
+        name: place.placeInfo.name,
+        address: place.placeInfo.address,
+        latitude: place.placeInfo.latitude,
+        longitude: place.placeInfo.longitude,
+        rating: place.placeInfo.rating,
+        summary: place.description,
+        source: `${place.source}で話題`,
+        googleMapsUrl: place.placeInfo.googleMapsUrl,
+        photoUrl: place.thumbnailUrl,
+      });
+    } else {
+      addPlaceMutation.mutate({
+        name: place.name,
+        summary: place.description,
+        source: `${place.source}で話題`,
+        googleMapsUrl: place.sourceUrl,
+        photoUrl: place.thumbnailUrl,
+      });
+    }
   };
 
   // Get current location
@@ -646,6 +671,46 @@ export default function FilterSearch() {
         </span>
       </div>
 
+      {/* エリア選択UI（話題のお店モード時のみ表示） */}
+      {filters.sort === 'trending' && (
+        <div className="px-4 py-2 border-b bg-muted/20">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            <span className="text-sm text-muted-foreground shrink-0">エリア:</span>
+            {[
+              { id: '', name: '全国' },
+              { id: '渋谷', name: '渋谷' },
+              { id: '新宿', name: '新宿' },
+              { id: '池袋', name: '池袋' },
+              { id: '原宿', name: '原宿' },
+              { id: '恵比寿', name: '恵比寿' },
+              { id: '銀座', name: '銀座' },
+              { id: '六本木', name: '六本木' },
+              { id: '表参道', name: '表参道' },
+              { id: '自由が丘', name: '自由が丘' },
+              { id: '吉祥寺', name: '吉祥寺' },
+              { id: '下北沢', name: '下北沢' },
+              { id: '横浜', name: '横浜' },
+              { id: '大阪', name: '大阪' },
+              { id: '京都', name: '京都' },
+              { id: '福岡', name: '福岡' },
+            ].map((area) => (
+              <Button
+                key={area.id}
+                variant={filters.prefecture === area.id || (!filters.prefecture && area.id === '') ? 'default' : 'outline'}
+                size="sm"
+                className="h-8 px-3 shrink-0"
+                onClick={() => setFilters((prev) => ({ 
+                  ...prev, 
+                  prefecture: area.id || undefined 
+                }))}
+              >
+                {area.name}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Results - スマホ最適化 */}
       <div className="flex-1 overflow-auto">
         <div className="px-4 py-3 pb-24">
@@ -733,6 +798,24 @@ export default function FilterSearch() {
                               <p className="text-xs text-muted-foreground mt-2">
                                 👁 {place.engagement.toLocaleString()}回視聴
                               </p>
+                            )}
+                            {/* Google Places情報があれば表示 */}
+                            {place.placeInfo && (
+                              <div className="mt-3 p-3 bg-muted/50 rounded-lg">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <MapPin className="h-4 w-4 text-primary" />
+                                  <span className="font-medium text-sm">{place.placeInfo.name}</span>
+                                  {place.placeInfo.rating && (
+                                    <span className="flex items-center text-xs">
+                                      <Star className="h-3 w-3 text-yellow-500 fill-yellow-500 mr-0.5" />
+                                      {place.placeInfo.rating}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground line-clamp-1">
+                                  {place.placeInfo.address}
+                                </p>
+                              </div>
                             )}
                           </div>
                         </div>

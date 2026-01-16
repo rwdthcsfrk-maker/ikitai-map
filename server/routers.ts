@@ -516,6 +516,25 @@ const advancedSearchRouter = router({
           } 
         }> };
 
+        // 動画タイトルから店舗名を抽出する関数
+        const extractStoreName = (text: string): string | null => {
+          // 「【店名】」形式
+          const bracketMatch = text.match(/[【『「《]([^】』」》]+)[】』」》]/);
+          if (bracketMatch) return bracketMatch[1].trim();
+          
+          // 「店名さん」「店名に行ってみた」形式
+          const storeMatch = text.match(/([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\w\s]+?)(?:さん|に行って|で食べ|の[\u30E9\u30E9\u30F3\u30C1\u30C7\u30A3\u30CA\u30FC])/);
+          if (storeMatch) return storeMatch[1].trim();
+          
+          // 最初の「、」や「！」までの部分を店名として抽出
+          const firstPart = text.split(/[、！？!?\n]/)[0];
+          if (firstPart && firstPart.length <= 30 && firstPart.length >= 2) {
+            return firstPart.trim();
+          }
+          
+          return null;
+        };
+
         // 結果を整形
         const trendingPlaces: Array<{
           name: string;
@@ -524,6 +543,16 @@ const advancedSearchRouter = router({
           engagement: number;
           sourceUrl?: string;
           thumbnailUrl?: string;
+          extractedStoreName?: string; // 抽出された店舗名
+          placeInfo?: { // Google Placesから取得した情報
+            placeId: string;
+            name: string;
+            address: string;
+            rating?: number;
+            latitude: number;
+            longitude: number;
+            googleMapsUrl: string;
+          };
         }> = [];
 
         // TikTokの結果から店舗名を抽出（まとめ動画を除外）
@@ -534,6 +563,7 @@ const advancedSearchRouter = router({
               const isCompilationVideo = /\d+選|まとめ|ランキング|全部|全店|全部食べ/.test(video.desc);
               if (isCompilationVideo) continue;
               
+              const extractedName = extractStoreName(video.desc);
               trendingPlaces.push({
                 name: video.desc.slice(0, 50),
                 source: "TikTok",
@@ -541,6 +571,7 @@ const advancedSearchRouter = router({
                 engagement: (video.stats?.playCount || 0) + (video.stats?.diggCount || 0),
                 sourceUrl: video.aweme_id ? `https://www.tiktok.com/@${video.author?.nickname || 'user'}/video/${video.aweme_id}` : undefined,
                 thumbnailUrl: video.video?.cover || undefined,
+                extractedStoreName: extractedName || undefined,
               });
             }
           }
@@ -560,6 +591,7 @@ const advancedSearchRouter = router({
                 ? `https://img.youtube.com/vi/${content.video.videoId}/mqdefault.jpg`
                 : content.video.thumbnails?.[0]?.url;
               
+              const extractedName = extractStoreName(title);
               trendingPlaces.push({
                 name: title,
                 source: "YouTube",
@@ -567,6 +599,7 @@ const advancedSearchRouter = router({
                 engagement: parseInt(content.video.viewCountText?.replace(/[^0-9]/g, "") || "0"),
                 sourceUrl: content.video.videoId ? `https://youtube.com/watch?v=${content.video.videoId}` : undefined,
                 thumbnailUrl,
+                extractedStoreName: extractedName || undefined,
               });
             }
           }
@@ -574,9 +607,44 @@ const advancedSearchRouter = router({
 
         // エンゲージメント順にソート
         trendingPlaces.sort((a, b) => b.engagement - a.engagement);
+        
+        // 上位の結果に対してGoogle Places検索を実行
+        const topPlaces = trendingPlaces.slice(0, input.limit);
+        const placesWithInfo = await Promise.all(
+          topPlaces.map(async (place) => {
+            if (!place.extractedStoreName) return place;
+            
+            try {
+              // 抽出した店舗名でGoogle Places検索
+              const searchArea = input.area || "東京";
+              const placeSearchQuery = `${place.extractedStoreName} ${searchArea}`;
+              const placeResult = await makeRequest<PlacesSearchResult>("/maps/api/place/textsearch/json", {
+                query: placeSearchQuery,
+                language: "ja",
+                region: "jp",
+              });
+              
+              if (placeResult?.results?.[0]) {
+                const p = placeResult.results[0];
+                place.placeInfo = {
+                  placeId: p.place_id,
+                  name: p.name,
+                  address: p.formatted_address,
+                  rating: p.rating,
+                  latitude: p.geometry.location.lat,
+                  longitude: p.geometry.location.lng,
+                  googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${p.place_id}`,
+                };
+              }
+            } catch (error) {
+              console.warn(`[Trending] Failed to search place for: ${place.extractedStoreName}`, error);
+            }
+            return place;
+          })
+        );
 
         return {
-          places: trendingPlaces.slice(0, input.limit),
+          places: placesWithInfo,
           searchQuery,
           sources: ["TikTok", "YouTube"],
         };

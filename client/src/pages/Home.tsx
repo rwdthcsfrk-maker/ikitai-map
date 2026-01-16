@@ -123,7 +123,7 @@ export default function Home() {
 
         if (map) {
           map.panTo({ lat: latitude, lng: longitude });
-          map.setZoom(15);
+          map.setZoom(16); // 飲食店POIが見やすいズームレベル
 
           if (currentLocationMarkerRef.current) {
             currentLocationMarkerRef.current.map = null;

@@ -165,7 +165,7 @@ interface MapViewProps {
 export function MapView({
   className,
   initialCenter = { lat: 35.6812, lng: 139.7671 }, // 東京駅をデフォルトに
-  initialZoom = 14,
+  initialZoom = 16, // 飲食店POIが見やすいズームレベル
   onMapReady,
   showRestaurantPOI = true,
   useCustomStyle = true,
