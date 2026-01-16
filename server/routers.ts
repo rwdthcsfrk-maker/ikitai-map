@@ -476,17 +476,21 @@ const advancedSearchRouter = router({
     .query(async ({ ctx, input }) => {
       const { callDataApi } = await import("./_core/dataApi");
       
-      // 検索キーワードを構築
+      // 検索キーワードを構築（まとめ動画ではなく1店舗紹介動画を優先）
       const keywords: string[] = [];
       if (input.area) keywords.push(input.area);
       if (input.genre) keywords.push(input.genre);
-      keywords.push("話題", "人気", "レストラン");
+      // 「店名 紹介」「食べてみた」「行ってみた」など単一店舗紹介動画に絞り込む
+      keywords.push("食べてみた", "行ってみた", "レビュー");
       const searchQuery = keywords.join(" ");
 
       try {
-        // TikTokで話題のレストランを検索
+        // TikTokで話題のレストランを検索（単一店舗紹介動画を優先）
+        const tiktokSearchQuery = input.area || input.genre 
+          ? `${input.area || ''} ${input.genre || ''} お店 紹介 食べてみた`.trim()
+          : "東京 グルメ お店 紹介 食べてみた";
         const tiktokResult = await callDataApi("Tiktok/search_tiktok_video_general", {
-          query: { keyword: searchQuery },
+          query: { keyword: tiktokSearchQuery },
         }) as { data?: Array<{ 
           desc?: string; 
           author?: { nickname?: string }; 
@@ -495,9 +499,12 @@ const advancedSearchRouter = router({
           aweme_id?: string;
         }> };
 
-        // YouTubeで話題のレストランを検索
+        // YouTubeで話題のレストランを検索（単一店舗紹介動画を優先）
+        const youtubeSearchQuery = input.area || input.genre 
+          ? `${input.area || ''} ${input.genre || ''} お店 紹介 食べてみた -まとめ -選`.trim()
+          : "東京 グルメ お店 紹介 食べてみた -まとめ -選";
         const youtubeResult = await callDataApi("Youtube/search", {
-          query: { q: searchQuery, hl: "ja", gl: "JP" },
+          query: { q: youtubeSearchQuery, hl: "ja", gl: "JP" },
         }) as { contents?: Array<{ 
           type?: string; 
           video?: { 
@@ -519,10 +526,14 @@ const advancedSearchRouter = router({
           thumbnailUrl?: string;
         }> = [];
 
-        // TikTokの結果から店舗名を抽出
+        // TikTokの結果から店舗名を抽出（まとめ動画を除外）
         if (tiktokResult?.data && Array.isArray(tiktokResult.data)) {
-          for (const video of tiktokResult.data.slice(0, 5)) {
+          for (const video of tiktokResult.data.slice(0, 10)) {
             if (video.desc) {
+              // まとめ動画を除外（「選」「まとめ」「ランキング」などが含まれるタイトルはスキップ）
+              const isCompilationVideo = /\d+選|まとめ|ランキング|全部|全店|全部食べ/.test(video.desc);
+              if (isCompilationVideo) continue;
+              
               trendingPlaces.push({
                 name: video.desc.slice(0, 50),
                 source: "TikTok",
@@ -535,17 +546,22 @@ const advancedSearchRouter = router({
           }
         }
 
-        // YouTubeの結果から店舗情報を抽出
+        // YouTubeの結果から店舗情報を抽出（まとめ動画を除外）
         if (youtubeResult?.contents && Array.isArray(youtubeResult.contents)) {
-          for (const content of youtubeResult.contents.slice(0, 5)) {
+          for (const content of youtubeResult.contents.slice(0, 10)) {
             if (content.type === "video" && content.video) {
+              const title = content.video.title || "";
+              // まとめ動画を除外（「選」「まとめ」「ランキング」などが含まれるタイトルはスキップ）
+              const isCompilationVideo = /\d+選|まとめ|ランキング|全部|全店|全部食べ/.test(title);
+              if (isCompilationVideo) continue;
+              
               // YouTubeサムネイルは標準フォーマットで取得
               const thumbnailUrl = content.video.videoId 
                 ? `https://img.youtube.com/vi/${content.video.videoId}/mqdefault.jpg`
                 : content.video.thumbnails?.[0]?.url;
               
               trendingPlaces.push({
-                name: content.video.title || "",
+                name: title,
                 source: "YouTube",
                 description: `${content.video.channelTitle || ""} - ${content.video.viewCountText || ""}回視聴`,
                 engagement: parseInt(content.video.viewCountText?.replace(/[^0-9]/g, "") || "0"),

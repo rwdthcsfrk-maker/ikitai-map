@@ -109,18 +109,66 @@ function loadMapScript() {
   });
 }
 
+// 淡い色調のマップスタイル（Google Mapsアプリ風）
+const LIGHT_MAP_STYLE: google.maps.MapTypeStyle[] = [
+  {
+    featureType: "all",
+    elementType: "geometry",
+    stylers: [{ saturation: -20 }, { lightness: 10 }]
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#c9d8e8" }]
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ lightness: 30 }]
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry",
+    stylers: [{ color: "#f5d6a8" }]
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#c5e8c5" }]
+  },
+  {
+    featureType: "poi.business",
+    elementType: "labels",
+    stylers: [{ visibility: "on" }]
+  },
+  {
+    featureType: "poi.attraction",
+    elementType: "labels",
+    stylers: [{ visibility: "on" }]
+  },
+  {
+    featureType: "transit.station",
+    elementType: "labels.icon",
+    stylers: [{ visibility: "on" }]
+  }
+];
+
 interface MapViewProps {
   className?: string;
   initialCenter?: google.maps.LatLngLiteral;
   initialZoom?: number;
   onMapReady?: (map: google.maps.Map) => void;
+  showRestaurantPOI?: boolean; // 飲食店POIを表示するか
+  useCustomStyle?: boolean; // カスタムスタイルを使用するか
 }
 
 export function MapView({
   className,
-  initialCenter = { lat: 37.7749, lng: -122.4194 },
-  initialZoom = 12,
+  initialCenter = { lat: 35.6812, lng: 139.7671 }, // 東京駅をデフォルトに
+  initialZoom = 14,
   onMapReady,
+  showRestaurantPOI = true,
+  useCustomStyle = true,
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
@@ -131,15 +179,20 @@ export function MapView({
       console.error("Map container not found");
       return;
     }
-    map.current = new window.google.maps.Map(mapContainer.current, {
+    // マップオプションを構築
+    const mapOptions: google.maps.MapOptions = {
       zoom: initialZoom,
       center: initialCenter,
-      mapTypeControl: true,
-      fullscreenControl: true,
-      zoomControl: true,
-      streetViewControl: true,
-      mapId: "DEMO_MAP_ID",
-    });
+      mapTypeControl: false,
+      fullscreenControl: false,
+      zoomControl: false,
+      streetViewControl: false,
+      mapId: "DEMO_MAP_ID", // AdvancedMarkerElementに必要
+      // カスタムスタイルを使用する場合はstylesも追加
+      ...(useCustomStyle ? { styles: LIGHT_MAP_STYLE } : {}),
+    };
+    
+    map.current = new window.google.maps.Map(mapContainer.current, mapOptions);
     if (onMapReady) {
       onMapReady(map.current);
     }
