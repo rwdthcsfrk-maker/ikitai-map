@@ -27,21 +27,17 @@ import {
   Filter,
   MapPin,
   Star,
-  ExternalLink,
   X,
   Navigation,
   Heart,
   CheckCircle,
   SlidersHorizontal,
   ChevronRight,
-  Plus,
-  Loader2,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Link } from "wouter";
 import { getLoginUrl } from "@/const";
 
-type SortOption = 'recommended' | 'distance' | 'rating' | 'reviews' | 'new' | 'trending';
+type SortOption = 'recommended' | 'distance' | 'rating' | 'reviews' | 'new';
 type BudgetType = 'lunch' | 'dinner';
 type StatusFilter = 'none' | 'want_to_go' | 'visited' | undefined;
 
@@ -75,84 +71,20 @@ export default function FilterSearch() {
   const { data: featuresData } = trpc.master.features.useQuery();
   const { data: sortOptionsData } = trpc.master.sortOptions.useQuery();
 
-  // 話題のお店を取得
-  const trendingQuery = trpc.advancedSearch.trending.useQuery(
-    {
-      area: filters.prefecture || undefined,
-      genre: filters.genreParent || undefined,
-      limit: 10,
-    },
-    {
-      enabled: isAuthenticated && filters.sort === 'trending',
-    }
-  );
   const { data: prefecturesData } = trpc.master.prefectures.useQuery();
 
   // Search query
   const searchQuery = trpc.advancedSearch.filter.useQuery(
     {
       ...filters,
-      sort: filters.sort === 'trending' ? 'recommended' : filters.sort,
       location: currentLocation || undefined,
       page,
       limit: 20,
     },
     {
-      enabled: isAuthenticated && filters.sort !== 'trending',
+      enabled: isAuthenticated,
     }
   );
-
-  // 話題のお店をリストに追加するmutation
-  const addPlaceMutation = trpc.place.create.useMutation({
-    onSuccess: () => {
-      toast.success("行きたいリストに追加しました");
-    },
-    onError: () => {
-      toast.error("追加に失敗しました");
-    },
-  });
-
-  // 話題のお店を追加するハンドラ
-  const handleAddTrendingPlace = (place: {
-    name: string;
-    source: string;
-    description: string;
-    sourceUrl?: string;
-    thumbnailUrl?: string;
-    placeInfo?: {
-      placeId: string;
-      name: string;
-      address: string;
-      rating?: number;
-      latitude: number;
-      longitude: number;
-      googleMapsUrl: string;
-    };
-  }) => {
-    // Google Places情報があればそれを使用
-    if (place.placeInfo) {
-      addPlaceMutation.mutate({
-        googlePlaceId: place.placeInfo.placeId,
-        name: place.placeInfo.name,
-        address: place.placeInfo.address,
-        latitude: place.placeInfo.latitude,
-        longitude: place.placeInfo.longitude,
-        rating: place.placeInfo.rating,
-        summary: place.description,
-        source: `${place.source}で話題`,
-        googleMapsUrl: place.placeInfo.googleMapsUrl,
-        photoUrl: place.thumbnailUrl,
-      });
-    } else {
-      addPlaceMutation.mutate({
-        name: place.name,
-        summary: place.description,
-        source: `${place.source}で話題`,
-        googleMapsUrl: place.sourceUrl,
-        photoUrl: place.thumbnailUrl,
-      });
-    }
-  };
 
   // Get current location
   const handleGetLocation = () => {
@@ -658,203 +590,17 @@ export default function FilterSearch() {
                 {s.label}
               </SelectItem>
             ))}
-            <SelectItem value="trending">
-              🔥 話題のお店
-            </SelectItem>
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">
-          {filters.sort === 'trending' 
-            ? `${trendingQuery.data?.places?.length || 0}件`
-            : `${searchQuery.data?.total || 0}件`
-          }
+          {searchQuery.data?.total || 0}件
         </span>
       </div>
-
-      {/* エリア選択UI（話題のお店モード時のみ表示） */}
-      {filters.sort === 'trending' && (
-        <div className="px-4 py-2 border-b bg-muted/20">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            <span className="text-sm text-muted-foreground shrink-0">エリア:</span>
-            {[
-              { id: '', name: '全国' },
-              { id: '渋谷', name: '渋谷' },
-              { id: '新宿', name: '新宿' },
-              { id: '池袋', name: '池袋' },
-              { id: '原宿', name: '原宿' },
-              { id: '恵比寿', name: '恵比寿' },
-              { id: '銀座', name: '銀座' },
-              { id: '六本木', name: '六本木' },
-              { id: '表参道', name: '表参道' },
-              { id: '自由が丘', name: '自由が丘' },
-              { id: '吉祥寺', name: '吉祥寺' },
-              { id: '下北沢', name: '下北沢' },
-              { id: '横浜', name: '横浜' },
-              { id: '大阪', name: '大阪' },
-              { id: '京都', name: '京都' },
-              { id: '福岡', name: '福岡' },
-            ].map((area) => (
-              <Button
-                key={area.id}
-                variant={filters.prefecture === area.id || (!filters.prefecture && area.id === '') ? 'default' : 'outline'}
-                size="sm"
-                className="h-8 px-3 shrink-0"
-                onClick={() => setFilters((prev) => ({ 
-                  ...prev, 
-                  prefecture: area.id || undefined 
-                }))}
-              >
-                {area.name}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Results - スマホ最適化 */}
       <div className="flex-1 overflow-auto">
         <div className="px-4 py-3 pb-24">
-          {/* 話題のお店表示 */}
-          {filters.sort === 'trending' ? (
-            trendingQuery.isLoading ? (
-              <div className="flex justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : trendingQuery.data?.places?.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground mb-4">話題のお店が見つかりませんでした</p>
-                <Button variant="outline" onClick={() => setFilters({ sort: 'recommended' })}>
-                  おすすめに切り替え
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* 話題のお店の説明 */}
-                <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950/30 dark:to-red-950/30 rounded-lg p-4 mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xl">🔥</span>
-                    <h3 className="font-semibold">SNSで話題のお店</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    TikTokやYouTubeで今話題のレストラン情報を表示しています
-                  </p>
-                  {trendingQuery.data?.searchQuery && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      検索: {trendingQuery.data.searchQuery}
-                    </p>
-                  )}
-                </div>
-
-                {trendingQuery.data?.places?.map((place, index) => (
-                  <Card key={index} className="overflow-hidden active:scale-[0.98] transition-transform">
-                    <CardContent className="p-0">
-                      {/* サムネイル表示 */}
-                      {place.thumbnailUrl && (
-                        <div className="relative w-full aspect-video bg-muted">
-                          <img
-                            src={place.thumbnailUrl}
-                            alt={place.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                          <Badge 
-                            variant="secondary" 
-                            className={`absolute top-2 left-2 text-xs ${
-                              place.source === 'TikTok' 
-                                ? 'bg-pink-500 text-white' 
-                                : 'bg-red-500 text-white'
-                            }`}
-                          >
-                            {place.source}
-                          </Badge>
-                        </div>
-                      )}
-                      <div className="p-4">
-                        <div className="flex justify-between items-start gap-3">
-                          <div className="flex-1 min-w-0">
-                            {!place.thumbnailUrl && (
-                              <div className="flex items-center gap-2 mb-1">
-                                <Badge 
-                                  variant="outline" 
-                                  className={`text-xs ${
-                                    place.source === 'TikTok' 
-                                      ? 'border-pink-500 text-pink-500' 
-                                      : 'border-red-500 text-red-500'
-                                  }`}
-                                >
-                                  {place.source}
-                                </Badge>
-                              </div>
-                            )}
-                            <h3 className="font-semibold text-base line-clamp-2 mb-1">
-                              {place.name}
-                            </h3>
-                            <p className="text-sm text-muted-foreground line-clamp-2">
-                              {place.description}
-                            </p>
-                            {place.engagement > 0 && (
-                              <p className="text-xs text-muted-foreground mt-2">
-                                👁 {place.engagement.toLocaleString()}回視聴
-                              </p>
-                            )}
-                            {/* Google Places情報があれば表示 */}
-                            {place.placeInfo && (
-                              <div className="mt-3 p-3 bg-muted/50 rounded-lg">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <MapPin className="h-4 w-4 text-primary" />
-                                  <span className="font-medium text-sm">{place.placeInfo.name}</span>
-                                  {place.placeInfo.rating && (
-                                    <span className="flex items-center text-xs">
-                                      <Star className="h-3 w-3 text-yellow-500 fill-yellow-500 mr-0.5" />
-                                      {place.placeInfo.rating}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-muted-foreground line-clamp-1">
-                                  {place.placeInfo.address}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {/* アクションボタン */}
-                        <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="flex-1 h-9"
-                            onClick={() => handleAddTrendingPlace(place)}
-                            disabled={addPlaceMutation.isPending}
-                          >
-                            {addPlaceMutation.isPending ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                            ) : (
-                              <Plus className="h-4 w-4 mr-1" />
-                            )}
-                            行きたいに追加
-                          </Button>
-                          {place.sourceUrl && (
-                            <a
-                              href={place.sourceUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <Button variant="outline" size="sm" className="h-9">
-                                <ExternalLink className="h-4 w-4 mr-1" />
-                                動画を見る
-                              </Button>
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )
-          ) : searchQuery.isLoading ? (
+          {searchQuery.isLoading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>

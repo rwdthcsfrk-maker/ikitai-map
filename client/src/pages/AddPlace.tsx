@@ -49,15 +49,24 @@ interface PlaceResult {
 
 type LatLng = { lat: number; lng: number };
 
-interface TrendingPlace {
-  placeId: string;
+// SNSで話題のお店の型定義
+interface SNSTrendingPlace {
   name: string;
-  address: string;
-  rating?: number | null;
-  userRatingsTotal?: number | null;
-  latitude: number;
-  longitude: number;
-  googleMapsUrl: string;
+  source: string;
+  description: string;
+  engagement: number;
+  sourceUrl?: string;
+  thumbnailUrl?: string;
+  extractedStoreName?: string;
+  placeInfo?: {
+    placeId: string;
+    name: string;
+    address: string;
+    rating?: number;
+    latitude: number;
+    longitude: number;
+    googleMapsUrl: string;
+  };
 }
 
 export default function AddPlace() {
@@ -79,10 +88,10 @@ export default function AddPlace() {
   const { data: lists } = trpc.list.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
-  const { data: trendingPlaces, isLoading: trendingLoading } = trpc.place.trending.useQuery(
+  // SNSで話題のお店を取得
+  const { data: trendingData, isLoading: trendingLoading } = trpc.advancedSearch.trending.useQuery(
     {
-      location: currentLocation ?? undefined,
-      limit: 8,
+      limit: 10,
     },
     {
       enabled: isAuthenticated,
@@ -230,22 +239,31 @@ export default function AddPlace() {
     [map]
   );
 
-  const toPlaceResultFromTrending = (place: TrendingPlace): PlaceResult => ({
-    placeId: place.placeId,
-    name: place.name,
-    address: place.address,
-    lat: place.latitude,
-    lng: place.longitude,
-    rating: place.rating ?? undefined,
-  });
-
-  const handleSelectTrendingPlace = (place: TrendingPlace) => {
-    handleSelectPlace(toPlaceResultFromTrending(place));
-  };
-
-  const handleAddTrendingPlace = (place: TrendingPlace) => {
-    handleSelectPlace(toPlaceResultFromTrending(place));
-    setIsSaveDrawerOpen(true);
+  // SNS話題のお店をリストに追加するハンドラ
+  const handleAddSNSTrendingPlace = (place: SNSTrendingPlace) => {
+    // Google Places情報があればそれを使用
+    if (place.placeInfo) {
+      createPlaceMutation.mutate({
+        googlePlaceId: place.placeInfo.placeId,
+        name: place.placeInfo.name,
+        address: place.placeInfo.address,
+        latitude: place.placeInfo.latitude,
+        longitude: place.placeInfo.longitude,
+        rating: place.placeInfo.rating,
+        summary: place.description,
+        source: `${place.source}で話題`,
+        googleMapsUrl: place.placeInfo.googleMapsUrl,
+        photoUrl: place.thumbnailUrl,
+      });
+    } else {
+      // Google Places情報がない場合は動画情報のみで保存
+      createPlaceMutation.mutate({
+        name: place.extractedStoreName || place.name,
+        summary: place.description,
+        source: `${place.source}で話題`,
+        photoUrl: place.thumbnailUrl,
+      });
+    }
   };
 
   const handleSave = async () => {
@@ -366,20 +384,20 @@ export default function AddPlace() {
           initialZoom={12}
         />
 
-        {/* Recommended Places */}
+        {/* SNSで話題のお店 */}
         {!selectedPlace && (
           <div className="absolute top-3 left-3 right-3 z-10">
-            <Card className="border-0 shadow-lg bg-gradient-to-r from-amber-50 to-orange-50/80 dark:from-amber-950/40 dark:to-orange-950/30">
+            <Card className="border-0 shadow-lg bg-gradient-to-r from-pink-50 to-red-50/80 dark:from-pink-950/40 dark:to-red-950/30">
               <CardContent className="p-3">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <div className="h-9 w-9 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-sm">
-                      <TrendingUp className="w-4 h-4" />
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-r from-pink-500 to-red-500 text-white flex items-center justify-center shadow-sm">
+                      <span className="text-base">🔥</span>
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">おすすめの店</p>
+                      <p className="text-sm font-semibold">話題のお店</p>
                       <p className="text-xs text-muted-foreground">
-                        {currentLocation ? "近くで人気のお店" : "人気のお店をピックアップ"}
+                        SNSで今話題のグルメスポット
                       </p>
                     </div>
                   </div>
@@ -388,52 +406,71 @@ export default function AddPlace() {
                   )}
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                  {(trendingPlaces || []).map((place) => (
+                  {(trendingData?.places || []).map((place, index) => (
                     <Card
-                      key={place.placeId}
-                      className="w-52 shrink-0 border bg-background/80 cursor-pointer active:scale-[0.98] transition-transform"
-                      onClick={() => handleSelectTrendingPlace(place)}
+                      key={index}
+                      className="w-56 shrink-0 border bg-background/90 cursor-pointer active:scale-[0.98] transition-transform overflow-hidden"
                     >
-                      <CardContent className="p-3">
-                        <div className="flex items-start gap-2">
-                          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                            <MapPin className="w-4 h-4 text-muted-foreground" />
+                      {/* サムネイル表示 */}
+                      {place.thumbnailUrl && (
+                        <div className="relative w-full h-28 bg-muted">
+                          <img
+                            src={place.thumbnailUrl}
+                            alt={place.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                          <div className={`absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium text-white ${
+                            place.source === 'TikTok' ? 'bg-pink-500' : 'bg-red-500'
+                          }`}>
+                            {place.source}
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium truncate">{place.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {place.address}
-                            </p>
-                            {place.rating && (
-                              <div className="flex items-center gap-1 mt-1">
-                                <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                                <span className="text-xs font-medium">{place.rating}</span>
-                                {place.userRatingsTotal && (
-                                  <span className="text-[10px] text-muted-foreground">
-                                    ({place.userRatingsTotal})
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                        </div>
+                      )}
+                      <CardContent className="p-2.5">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium line-clamp-2 leading-tight mb-1">
+                            {place.extractedStoreName || place.name}
+                          </p>
+                          {place.placeInfo && (
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <MapPin className="w-3 h-3" />
+                              <span className="truncate">{place.placeInfo.address?.split(' ')[0]}</span>
+                              {place.placeInfo.rating && (
+                                <span className="flex items-center ml-1">
+                                  <Star className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400" />
+                                  {place.placeInfo.rating}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <Button
                           size="sm"
-                          className="w-full h-8 mt-2"
+                          className="w-full h-7 mt-2 text-xs"
                           onClick={(event) => {
                             event.stopPropagation();
-                            handleAddTrendingPlace(place);
+                            handleAddSNSTrendingPlace(place);
                           }}
+                          disabled={createPlaceMutation.isPending}
                         >
-                          <Plus className="w-3 h-3 mr-1" />
-                          追加
+                          {createPlaceMutation.isPending ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Plus className="w-3 h-3 mr-1" />
+                              追加
+                            </>
+                          )}
                         </Button>
                       </CardContent>
                     </Card>
                   ))}
-                  {!trendingLoading && (!trendingPlaces || trendingPlaces.length === 0) && (
+                  {!trendingLoading && (!trendingData?.places || trendingData.places.length === 0) && (
                     <div className="text-xs text-muted-foreground px-2 py-3">
-                      近くのおすすめが見つかりませんでした
+                      話題のお店が見つかりませんでした
                     </div>
                   )}
                 </div>

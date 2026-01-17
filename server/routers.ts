@@ -485,10 +485,11 @@ const advancedSearchRouter = router({
       const searchQuery = keywords.join(" ");
 
       try {
-        // TikTokで話題のレストランを検索（単一店舗紹介動画を優先）
+        // TikTokで話題のレストランを検索（写真投稿を優先）
         const tiktokSearchQuery = input.area || input.genre 
-          ? `${input.area || ''} ${input.genre || ''} お店 紹介 食べてみた`.trim()
-          : "東京 グルメ お店 紹介 食べてみた";
+          ? `${input.area || ''} ${input.genre || ''} グルメ おすすめ`.trim()
+          : "東京 グルメ おすすめ 食べ物";
+        // TikTokの写真投稿を検索（動画ではなく写真コンテンツを取得）
         const tiktokResult = await callDataApi("Tiktok/search_tiktok_video_general", {
           query: { keyword: tiktokSearchQuery },
         }) as { data?: Array<{ 
@@ -497,6 +498,7 @@ const advancedSearchRouter = router({
           stats?: { playCount?: number; diggCount?: number };
           video?: { cover?: string; id?: string };
           aweme_id?: string;
+          image_post_info?: { images?: Array<{ display_image?: { url_list?: string[] } }> };
         }> };
 
         // YouTubeで話題のレストランを検索（単一店舗紹介動画を優先）
@@ -555,22 +557,29 @@ const advancedSearchRouter = router({
           };
         }> = [];
 
-        // TikTokの結果から店舗名を抽出（まとめ動画を除外）
+        // TikTokの結果から店舗名を抽出（写真投稿を優先、まとめ動画を除外）
         if (tiktokResult?.data && Array.isArray(tiktokResult.data)) {
-          for (const video of tiktokResult.data.slice(0, 10)) {
-            if (video.desc) {
+          for (const post of tiktokResult.data.slice(0, 15)) {
+            if (post.desc) {
               // まとめ動画を除外（「選」「まとめ」「ランキング」などが含まれるタイトルはスキップ）
-              const isCompilationVideo = /\d+選|まとめ|ランキング|全部|全店|全部食べ/.test(video.desc);
-              if (isCompilationVideo) continue;
+              const isCompilationPost = /\d+選|まとめ|ランキング|全部|全店|全部食べ/.test(post.desc);
+              if (isCompilationPost) continue;
               
-              const extractedName = extractStoreName(video.desc);
+              const extractedName = extractStoreName(post.desc);
+              
+              // 写真投稿の場合は写真をサムネイルとして使用
+              let thumbnailUrl = post.video?.cover;
+              if (post.image_post_info?.images?.[0]?.display_image?.url_list?.[0]) {
+                thumbnailUrl = post.image_post_info.images[0].display_image.url_list[0];
+              }
+              
               trendingPlaces.push({
-                name: video.desc.slice(0, 50),
+                name: post.desc.slice(0, 50),
                 source: "TikTok",
-                description: video.desc,
-                engagement: (video.stats?.playCount || 0) + (video.stats?.diggCount || 0),
-                sourceUrl: video.aweme_id ? `https://www.tiktok.com/@${video.author?.nickname || 'user'}/video/${video.aweme_id}` : undefined,
-                thumbnailUrl: video.video?.cover || undefined,
+                description: post.desc,
+                engagement: (post.stats?.playCount || 0) + (post.stats?.diggCount || 0),
+                sourceUrl: post.aweme_id ? `https://www.tiktok.com/@${post.author?.nickname || 'user'}/video/${post.aweme_id}` : undefined,
+                thumbnailUrl,
                 extractedStoreName: extractedName || undefined,
               });
             }
