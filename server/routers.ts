@@ -638,18 +638,19 @@ const advancedSearchRouter = router({
         ]).map((query) => query.replace(/\s+/g, ""));
         for (const instagramSearchQuery of instagramQueries) {
           if (trendingPlaces.length >= targetCount) break;
-          let instagramResult: { data?: { items?: Array<{
+          type InstagramResultType = { data?: { items?: Array<{
             caption?: { text?: string };
             user?: { username?: string };
             like_count?: number;
             comment_count?: number;
             image_versions2?: { candidates?: Array<{ url?: string }> };
             code?: string;
-          }> } } | null = null;
+          }> } };
+          let instagramResult: InstagramResultType | null = null;
           try {
             instagramResult = await callDataApi("Instagram/search_hashtag", {
               query: { name: instagramSearchQuery },
-            }) as typeof instagramResult;
+            }) as InstagramResultType;
           } catch (e) {
             console.warn("[Trending] Instagram search failed:", e);
             continue;
