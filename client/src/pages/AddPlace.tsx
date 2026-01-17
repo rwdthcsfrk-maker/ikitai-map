@@ -86,6 +86,41 @@ const buildPhotoUrl = (photoReference?: string) => {
   )}`;
 };
 
+const TAG_RULES: Array<{ label: string; patterns: RegExp[] }> = [
+  { label: "ラーメン", patterns: [/ラーメン/, /つけ麺/, /まぜそば/] },
+  { label: "カフェ", patterns: [/カフェ/, /珈琲/, /コーヒー/, /喫茶/] },
+  { label: "焼肉", patterns: [/焼肉/, /ホルモン/, /牛タン/] },
+  { label: "寿司", patterns: [/寿司/, /鮨/, /海鮮/] },
+  { label: "居酒屋", patterns: [/居酒屋/, /飲み/, /せんべろ/] },
+  { label: "スイーツ", patterns: [/スイーツ/, /パフェ/, /ケーキ/, /プリン/] },
+  { label: "映え", patterns: [/映え/, /インスタ/, /おしゃれ/] },
+  { label: "行列", patterns: [/行列/, /人気/, /話題/] },
+  { label: "コスパ", patterns: [/コスパ/, /安い/, /お得/] },
+  { label: "デート", patterns: [/デート/, /雰囲気/, /記念日/] },
+];
+
+const pickSummaryTags = (place: SNSTrendingPlace) => {
+  const haystack = [
+    place.extractedStoreName,
+    place.name,
+    place.description,
+    place.placeInfo?.address,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const tags: string[] = [];
+  for (const rule of TAG_RULES) {
+    if (rule.patterns.some((pattern) => pattern.test(haystack))) {
+      tags.push(rule.label);
+    }
+    if (tags.length >= 3) break;
+  }
+  if (tags.length === 0) {
+    tags.push("話題", "近いかも");
+  }
+  return tags.slice(0, 3);
+};
+
 // SNSで話題のお店の型定義
 interface SNSTrendingPlace {
   name: string;
@@ -596,20 +631,30 @@ export default function AddPlace() {
                                 <p className="text-sm font-semibold line-clamp-2 leading-tight mb-1">
                                   {place.extractedStoreName || place.name}
                                 </p>
-                                {place.placeInfo && (
-                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <MapPin className="w-3.5 h-3.5" />
-                                    <span className="truncate">{place.placeInfo.address?.split(' ')[0]}</span>
-                                    {place.placeInfo.rating && (
-                                      <span className="flex items-center ml-1">
-                                        <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                                        {place.placeInfo.rating}
-                                      </span>
-                                    )}
-                                  </div>
+                            {place.placeInfo && (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <MapPin className="w-3.5 h-3.5" />
+                                <span className="truncate">{place.placeInfo.address?.split(' ')[0]}</span>
+                                {place.placeInfo.rating && (
+                                  <span className="flex items-center ml-1">
+                                    <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                    {place.placeInfo.rating}
+                                  </span>
                                 )}
                               </div>
-                              <div className="grid grid-cols-2 gap-2 mt-3">
+                            )}
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {pickSummaryTags(place).map((tag) => (
+                              <span
+                                key={`${place.name}-${tag}`}
+                                className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 mt-3">
                                 <Button
                                   size="sm"
                                   className="h-8 text-xs"
@@ -826,6 +871,18 @@ export default function AddPlace() {
                   )}
                 </div>
               </div>
+              {detailTarget && (
+                <div className="flex flex-wrap gap-2">
+                  {pickSummaryTags(detailTarget).map((tag) => (
+                    <span
+                      key={`detail-${tag}`}
+                      className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
               {detailData.opening_hours?.weekday_text && (
                 <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
                   {detailData.opening_hours.weekday_text.map((line) => (
