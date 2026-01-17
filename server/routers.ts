@@ -51,6 +51,34 @@ const placeRouter = router({
       return place;
     }),
 
+  googleDetails: protectedProcedure
+    .input(z.object({ placeId: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const details = await makeRequest<PlaceDetailsResult>("/maps/api/place/details/json", {
+        place_id: input.placeId,
+        language: "ja",
+        fields: [
+          "place_id",
+          "name",
+          "formatted_address",
+          "formatted_phone_number",
+          "international_phone_number",
+          "website",
+          "rating",
+          "user_ratings_total",
+          "opening_hours",
+          "photos",
+          "geometry",
+        ].join(","),
+      });
+
+      if (!details || details.status !== "OK") {
+        return null;
+      }
+
+      return details.result;
+    }),
+
   update: protectedProcedure
     .input(z.object({
       id: z.number(),
@@ -696,8 +724,12 @@ const advancedSearchRouter = router({
           })
         );
 
+        const verifiedPlaces = placesWithInfo.filter(
+          (place) => place.placeInfo && place.sourceUrl
+        );
+
         return {
-          places: placesWithInfo,
+          places: verifiedPlaces,
           searchQuery,
           sources: ["TikTok", "YouTube", "Instagram"],
         };

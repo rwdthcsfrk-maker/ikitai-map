@@ -189,6 +189,11 @@ export type PlaceDetailsResult = {
     website?: string;
     rating?: number;
     user_ratings_total?: number;
+    photos?: Array<{
+      photo_reference: string;
+      width: number;
+      height: number;
+    }>;
     reviews?: Array<{
       author_name: string;
       rating: number;
@@ -313,7 +318,6 @@ export type RoadsResult = {
  * Output: Image URL (not JSON) - use directly in <img src={url} />
  * Note: Construct URL manually with getMapsConfig() for auth
  */
-
 
 
 

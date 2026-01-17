@@ -23,6 +23,11 @@ import {
   ChevronUp,
   X,
   TrendingUp,
+  ExternalLink,
+  CheckCircle2,
+  Clock,
+  Phone,
+  Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -34,6 +39,7 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface PlaceResult {
   placeId: string;
@@ -48,6 +54,37 @@ interface PlaceResult {
 }
 
 type LatLng = { lat: number; lng: number };
+type GooglePlaceDetails = {
+  place_id: string;
+  name: string;
+  formatted_address: string;
+  formatted_phone_number?: string;
+  international_phone_number?: string;
+  website?: string;
+  rating?: number;
+  user_ratings_total?: number;
+  opening_hours?: {
+    open_now: boolean;
+    weekday_text: string[];
+  };
+  photos?: Array<{
+    photo_reference: string;
+    width: number;
+    height: number;
+  }>;
+};
+
+const FRONTEND_FORGE_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY;
+const FRONTEND_FORGE_BASE =
+  import.meta.env.VITE_FRONTEND_FORGE_API_URL || "https://forge.butterfly-effect.dev";
+const MAPS_PROXY_URL = `${FRONTEND_FORGE_BASE}/v1/maps/proxy`;
+
+const buildPhotoUrl = (photoReference?: string) => {
+  if (!photoReference || !FRONTEND_FORGE_KEY) return undefined;
+  return `${MAPS_PROXY_URL}/maps/api/place/photo?key=${FRONTEND_FORGE_KEY}&maxwidth=800&photoreference=${encodeURIComponent(
+    photoReference
+  )}`;
+};
 
 // SNSで話題のお店の型定義
 interface SNSTrendingPlace {
@@ -82,11 +119,16 @@ export default function AddPlace() {
   const [isSaveDrawerOpen, setIsSaveDrawerOpen] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
   const [selectedArea, setSelectedArea] = useState<string>('');
+  const [detailTarget, setDetailTarget] = useState<SNSTrendingPlace | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
   const utils = trpc.useUtils();
   const { data: lists } = trpc.list.list.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const { data: savedPlaces } = trpc.place.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
   // SNSで話題のお店を取得
@@ -98,6 +140,19 @@ export default function AddPlace() {
     {
       enabled: isAuthenticated,
     }
+  );
+  const verifiedTrendingPlaces = (trendingData?.places || []).filter(
+    (place) => place.placeInfo && place.sourceUrl
+  );
+  const savedPlaceIds = new Set(
+    (savedPlaces || [])
+      .map((place) => place.googlePlaceId)
+      .filter((placeId): placeId is string => Boolean(placeId))
+  );
+  const detailPlaceId = detailTarget?.placeInfo?.placeId;
+  const { data: detailData, isLoading: detailLoading } = trpc.place.googleDetails.useQuery(
+    { placeId: detailPlaceId || "" },
+    { enabled: Boolean(detailPlaceId && isDetailOpen) }
   );
 
   // エリア選択肢
@@ -254,8 +309,18 @@ export default function AddPlace() {
     [map]
   );
 
+  const handleOpenDetails = (place: SNSTrendingPlace) => {
+    setDetailTarget(place);
+    setIsDetailOpen(true);
+  };
+
   // SNS話題のお店をリストに追加するハンドラ
   const handleAddSNSTrendingPlace = (place: SNSTrendingPlace) => {
+    const googlePlaceId = place.placeInfo?.placeId;
+    if (googlePlaceId && savedPlaceIds.has(googlePlaceId)) {
+      toast.success("すでに追加済みです");
+      return;
+    }
     // Google Places情報があればそれを使用
     if (place.placeInfo) {
       createPlaceMutation.mutate({
@@ -435,14 +500,26 @@ export default function AddPlace() {
                   ))}
                 </div>
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                  {(trendingData?.places || []).map((place, index) => (
+                  {verifiedTrendingPlaces.map((place, index) => (
                     <Card
                       key={index}
                       className="w-56 shrink-0 border bg-background/90 cursor-pointer active:scale-[0.98] transition-transform overflow-hidden"
+                      onClick={() => handleOpenDetails(place)}
                     >
+                      {place.placeInfo?.placeId && savedPlaceIds.has(place.placeInfo.placeId) && (
+                        <div className="absolute top-2 right-2 z-10 rounded-full bg-emerald-500 text-white p-1 shadow-sm">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        </div>
+                      )}
                       {/* サムネイル表示 */}
                       {place.thumbnailUrl && (
-                        <div className="relative w-full h-28 bg-muted">
+                        <a
+                          className="relative block w-full h-28 bg-muted"
+                          href={place.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="話題のお店の動画を開く"
+                        >
                           <img
                             src={place.thumbnailUrl}
                             alt={place.name}
@@ -456,7 +533,11 @@ export default function AddPlace() {
                           }`}>
                             {place.source}
                           </div>
-                        </div>
+                          <div className="absolute bottom-1.5 right-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] text-white flex items-center gap-1">
+                            <ExternalLink className="w-3 h-3" />
+                            動画
+                          </div>
+                        </a>
                       )}
                       <CardContent className="p-2.5">
                         <div className="min-w-0">
@@ -476,28 +557,52 @@ export default function AddPlace() {
                             </div>
                           )}
                         </div>
-                        <Button
-                          size="sm"
-                          className="w-full h-7 mt-2 text-xs"
-                          onClick={(event) => {
+                        <div className="grid grid-cols-2 gap-1.5 mt-2">
+                          <Button
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={(event) => {
                             event.stopPropagation();
                             handleAddSNSTrendingPlace(place);
                           }}
-                          disabled={createPlaceMutation.isPending}
+                          disabled={
+                            createPlaceMutation.isPending ||
+                            (place.placeInfo?.placeId
+                              ? savedPlaceIds.has(place.placeInfo.placeId)
+                              : false)
+                          }
                         >
                           {createPlaceMutation.isPending ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : place.placeInfo?.placeId &&
+                            savedPlaceIds.has(place.placeInfo.placeId) ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              追加済み
+                            </>
                           ) : (
                             <>
                               <Plus className="w-3 h-3 mr-1" />
                               追加
-                            </>
-                          )}
-                        </Button>
+                              </>
+                            )}
+                          </Button>
+                          <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                            <a
+                              href={place.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <ExternalLink className="w-3 h-3 mr-1" />
+                              動画
+                            </a>
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   ))}
-                  {!trendingLoading && (!trendingData?.places || trendingData.places.length === 0) && (
+                  {!trendingLoading && verifiedTrendingPlaces.length === 0 && (
                     <div className="text-xs text-muted-foreground px-2 py-3">
                       話題のお店が見つかりませんでした
                     </div>
@@ -622,6 +727,123 @@ export default function AddPlace() {
           </ScrollArea>
         </DrawerContent>
       </Drawer>
+
+      {/* Trending Details Dialog */}
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg">
+              {detailTarget?.placeInfo?.name || detailTarget?.name}
+            </DialogTitle>
+          </DialogHeader>
+          {detailLoading ? (
+            <div className="py-6 flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : detailData ? (
+            <div className="space-y-4">
+              {detailData.photos?.[0] && (
+                <img
+                  src={buildPhotoUrl(detailData.photos[0].photo_reference)}
+                  alt={detailData.name}
+                  className="w-full h-48 object-cover rounded-lg"
+                />
+              )}
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">{detailData.formatted_address}</p>
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  {detailData.rating && (
+                    <span className="inline-flex items-center gap-1">
+                      <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                      {detailData.rating}
+                      {detailData.user_ratings_total && (
+                        <span className="text-xs text-muted-foreground">
+                          ({detailData.user_ratings_total})
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {detailData.opening_hours && (
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="w-4 h-4" />
+                      {detailData.opening_hours.open_now ? "営業中" : "営業時間外"}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {detailData.opening_hours?.weekday_text && (
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-1">
+                  {detailData.opening_hours.weekday_text.map((line) => (
+                    <p key={line}>{line}</p>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-2 text-sm">
+                {detailData.formatted_phone_number && (
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-muted-foreground" />
+                    <a href={`tel:${detailData.formatted_phone_number}`}>
+                      {detailData.formatted_phone_number}
+                    </a>
+                  </div>
+                )}
+                {detailData.website && (
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-muted-foreground" />
+                    <a
+                      href={detailData.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary"
+                    >
+                      公式サイト
+                    </a>
+                  </div>
+                )}
+              </div>
+              {detailTarget?.sourceUrl && (
+                <Button asChild variant="outline" className="w-full">
+                  <a
+                    href={detailTarget.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    話題の投稿を見る
+                  </a>
+                </Button>
+              )}
+              <Button
+                className="w-full"
+                onClick={() => detailTarget && handleAddSNSTrendingPlace(detailTarget)}
+                disabled={
+                  createPlaceMutation.isPending ||
+                  (detailTarget?.placeInfo?.placeId
+                    ? savedPlaceIds.has(detailTarget.placeInfo.placeId)
+                    : false)
+                }
+              >
+                {detailTarget?.placeInfo?.placeId &&
+                savedPlaceIds.has(detailTarget.placeInfo.placeId) ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    追加済み
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    この店舗を追加
+                  </>
+                )}
+              </Button>
+            </div>
+          ) : (
+            <div className="py-6 text-sm text-muted-foreground">
+              詳細情報を取得できませんでした
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Save Drawer */}
       <Drawer open={isSaveDrawerOpen} onOpenChange={setIsSaveDrawerOpen}>
