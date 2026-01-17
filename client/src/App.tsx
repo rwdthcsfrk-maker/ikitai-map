@@ -11,6 +11,8 @@ import AddPlace from "./pages/AddPlace";
 import Search from "./pages/Search";
 import FilterSearch from "./pages/FilterSearch";
 import MyPage from "./pages/MyPage";
+import TrendingStackMock from "./pages/TrendingStackMock";
+import TrendingRowMock from "./pages/TrendingRowMock";
 
 function Router() {
   return (
@@ -22,6 +24,8 @@ function Router() {
       <Route path="/search" component={Search} />
       <Route path="/filter" component={FilterSearch} />
       <Route path="/mypage" component={MyPage} />
+      <Route path="/mock/trending-stack" component={TrendingStackMock} />
+      <Route path="/mock/trending-row" component={TrendingRowMock} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
