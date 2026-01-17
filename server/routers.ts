@@ -149,7 +149,7 @@ const placeRouter = router({
       return { success: true };
     }),
 
-  trending: protectedProcedure
+  trending: publicProcedure
     .input(z.object({
       query: z.string().optional(),
       location: z.object({
@@ -495,7 +495,7 @@ const advancedSearchRouter = router({
     }),
 
   // 話題のお店を取得（SNS/ネットで話題のレストランを検索）
-  trending: protectedProcedure
+  trending: publicProcedure
     .input(z.object({
       area: z.string().optional(), // エリア（渋谷、新宿など）
       genre: z.string().optional(), // ジャンル（イタリアン、和食など）

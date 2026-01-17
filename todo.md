@@ -144,3 +144,7 @@
 ## 新機能（v17）
 - [x] 店舗追加画面にエリア選択ボタンを追加
 - [x] Instagram連携で話題のお店を取得（APIが利用不可のためTikTok/YouTubeのみ）
+
+
+## バグ修正（v18）
+- [x] trendingエンドポイントをpublicProcedureに変更（ログイン不要で話題のお店を表示）
