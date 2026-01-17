@@ -166,6 +166,9 @@ export default function AddPlace() {
   const { data: lists } = trpc.list.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const { data: sharedLists } = trpc.list.shared.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
   const { data: savedPlaces } = trpc.place.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
@@ -988,19 +991,27 @@ export default function AddPlace() {
               </div>
             )}
 
-            {lists && lists.length > 0 && (
+            {(lists && lists.length > 0) || (sharedLists && sharedLists.length > 0) ? (
               <div className="space-y-3">
                 <Label className="text-sm font-medium">リストに追加（任意）</Label>
                 <div className="space-y-2">
-                  {lists.map((list) => (
+                  {[...(lists || []), ...(sharedLists || [])].map((list) => (
                     <div
                       key={list.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer active:bg-muted/50"
-                      onClick={() => toggleList(list.id)}
+                      className={`flex items-center gap-3 p-3 rounded-lg border ${
+                        list.accessRole === "viewer"
+                          ? "opacity-60 cursor-not-allowed"
+                          : "cursor-pointer active:bg-muted/50"
+                      }`}
+                      onClick={() => {
+                        if (list.accessRole === "viewer") return;
+                        toggleList(list.id);
+                      }}
                     >
                       <Checkbox
                         checked={selectedLists.includes(list.id)}
                         onCheckedChange={() => toggleList(list.id)}
+                        disabled={list.accessRole === "viewer"}
                       />
                       <div
                         className="w-8 h-8 rounded-lg flex items-center justify-center"
@@ -1009,11 +1020,16 @@ export default function AddPlace() {
                         <List className="w-4 h-4 text-white" />
                       </div>
                       <span className="text-sm">{list.name}</span>
+                      {list.accessRole && (
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {list.accessRole === "editor" ? "編集可" : "閲覧"}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
           <DrawerFooter className="border-t pt-4">
             <Button

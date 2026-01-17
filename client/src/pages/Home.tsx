@@ -33,6 +33,7 @@ import {
   IceCream,
   Globe,
   Beer,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
@@ -80,6 +81,7 @@ export default function Home() {
   const [isLocating, setIsLocating] = useState(false);
   const [isPlaceListOpen, setIsPlaceListOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
+  const [savingRecommendedId, setSavingRecommendedId] = useState<string | null>(null);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
 
@@ -92,6 +94,20 @@ export default function Home() {
   const { data: places, isLoading: placesLoading } = trpc.place.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const { data: recommendedPlaces, isLoading: recommendedLoading } = trpc.place.recommended.useQuery(
+    {
+      location: currentLocation ?? undefined,
+      limit: 6,
+    },
+    {
+      enabled: isAuthenticated,
+    }
+  );
+  const savedPlaceIds = new Set(
+    (places || [])
+      .map((place) => place.googlePlaceId)
+      .filter((placeId): placeId is string => Boolean(placeId))
+  );
 
   const parseSearchMutation = trpc.ai.parseSearchQuery.useMutation();
   const updateStatusMutation = trpc.place.updateStatus.useMutation({
@@ -99,10 +115,50 @@ export default function Home() {
       utils.place.list.invalidate();
     },
   });
+  const createPlaceMutation = trpc.place.create.useMutation({
+    onSuccess: () => {
+      utils.place.list.invalidate();
+      toast.success("行きたいに追加しました");
+    },
+    onError: () => {
+      toast.error("追加に失敗しました");
+    },
+  });
 
   const handleMapReady = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
   }, []);
+
+  const handleSaveRecommended = (place: {
+    placeId: string;
+    name: string;
+    address: string;
+    rating?: number;
+    latitude: number;
+    longitude: number;
+    googleMapsUrl: string;
+  }) => {
+    if (savedPlaceIds.has(place.placeId)) {
+      toast.success("すでに追加済みです");
+      return;
+    }
+    setSavingRecommendedId(place.placeId);
+    createPlaceMutation.mutate(
+      {
+        googlePlaceId: place.placeId,
+        name: place.name,
+        address: place.address,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        rating: place.rating,
+        source: "Google",
+        googleMapsUrl: place.googleMapsUrl,
+      },
+      {
+        onSettled: () => setSavingRecommendedId(null),
+      }
+    );
+  };
 
   // 現在地を取得
   const getCurrentLocation = useCallback((options?: { showToast?: boolean }) => {
@@ -547,6 +603,75 @@ export default function Home() {
       {/* マップエリア */}
       <div className="flex-1 relative">
         <MapView onMapReady={handleMapReady} />
+
+        {/* あなたへのおすすめ */}
+        {recommendedPlaces && recommendedPlaces.length > 0 && (
+          <div className="absolute top-14 left-3 right-3 z-10">
+            <Card className="border-0 shadow-lg bg-background/95 backdrop-blur">
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-sm font-semibold">あなたへのおすすめ</p>
+                    <p className="text-xs text-muted-foreground">保存した傾向からピックアップ</p>
+                  </div>
+                  {recommendedLoading && (
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                  {recommendedPlaces.map((place) => (
+                    <Card
+                      key={place.placeId}
+                      className="w-56 shrink-0 border bg-background/90"
+                    >
+                      <CardContent className="p-3 space-y-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate">{place.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {place.address?.split(" ")[0]}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mt-1">{place.reason}</p>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {place.rating && (
+                            <span className="flex items-center gap-1 text-foreground">
+                              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                              {place.rating}
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          className="w-full h-8 text-xs"
+                          onClick={() => handleSaveRecommended(place)}
+                          disabled={
+                            createPlaceMutation.isPending ||
+                            savingRecommendedId === place.placeId ||
+                            savedPlaceIds.has(place.placeId)
+                          }
+                        >
+                          {savedPlaceIds.has(place.placeId) ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              追加済み
+                            </>
+                          ) : savingRecommendedId === place.placeId ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Plus className="w-3 h-3 mr-1" />
+                              保存する
+                            </>
+                          )}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* 件数バッジ */}
         <div className="absolute top-3 left-3 bg-background/95 backdrop-blur px-3 py-1.5 rounded-full shadow-lg text-sm font-medium">

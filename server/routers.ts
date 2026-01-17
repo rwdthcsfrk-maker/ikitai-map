@@ -41,6 +41,89 @@ const placeRouter = router({
     return db.getPlacesByUserId(ctx.user.id);
   }),
 
+  recommended: protectedProcedure
+    .input(z.object({
+      location: z.object({
+        lat: z.number(),
+        lng: z.number(),
+      }).optional(),
+      radius: z.number().min(500).max(50000).optional(),
+      limit: z.number().min(1).max(20).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const savedPlaces = await db.getPlacesByUserId(ctx.user.id);
+      const counts = new Map<string, number>();
+      for (const place of savedPlaces) {
+        const genre = place.genreParent || place.genre || place.genreChild;
+        if (!genre) continue;
+        counts.set(genre, (counts.get(genre) || 0) + 1);
+      }
+
+      const preferredGenres = Array.from(counts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([genre]) => genre)
+        .slice(0, 3);
+
+      const baseQueries = preferredGenres.length > 0 ? preferredGenres : ["グルメ"];
+      const limit = input.limit ?? 6;
+      const results: Array<{
+        placeId: string;
+        name: string;
+        address: string;
+        rating?: number;
+        userRatingsTotal?: number;
+        latitude: number;
+        longitude: number;
+        googleMapsUrl: string;
+        reason: string;
+      }> = [];
+      const seen = new Set<string>();
+
+      for (const genre of baseQueries) {
+        if (results.length >= limit) break;
+        const params: Record<string, unknown> = {
+          query: `${genre} 人気 おすすめ`,
+          language: "ja",
+          region: "jp",
+        };
+        if (input.location) {
+          params.location = `${input.location.lat},${input.location.lng}`;
+          params.radius = input.radius ?? 3000;
+        }
+
+        let response: PlacesSearchResult | null = null;
+        try {
+          response = await makeRequest<PlacesSearchResult>("/maps/api/place/textsearch/json", params);
+        } catch (error) {
+          console.warn("[Place] Recommended search failed:", error);
+          continue;
+        }
+
+        if (!response || (response.status !== "OK" && response.status !== "ZERO_RESULTS")) {
+          continue;
+        }
+
+        for (const place of response.results ?? []) {
+          if (seen.has(place.place_id)) continue;
+          seen.add(place.place_id);
+          results.push({
+            placeId: place.place_id,
+            name: place.name,
+            address: place.formatted_address,
+            rating: place.rating,
+            userRatingsTotal: place.user_ratings_total,
+            latitude: place.geometry.location.lat,
+            longitude: place.geometry.location.lng,
+            googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
+            reason: preferredGenres.length > 0 ? `${genre}が好きそう` : "人気のお店",
+          });
+          if (results.length >= limit) break;
+        }
+      }
+
+      return results;
+    }),
+
   get: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
@@ -229,6 +312,13 @@ const placeRouter = router({
 });
 
 // ==================== List Router ====================
+const getListAccessRole = async (listId: number, ownerId: number, userId: number) => {
+  if (ownerId === userId) {
+    return "owner" as const;
+  }
+  return db.getListMemberRole(listId, userId);
+};
+
 const listRouter = router({
   create: protectedProcedure
     .input(z.object({
@@ -238,10 +328,17 @@ const listRouter = router({
       icon: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      return db.createList({
+      const list = await db.createList({
         userId: ctx.user.id,
         ...input,
       });
+      await db.addListMember({
+        listId: list.id,
+        userId: ctx.user.id,
+        role: "owner",
+        invitedBy: ctx.user.id,
+      });
+      return list;
     }),
 
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -255,15 +352,32 @@ const listRouter = router({
     return listsWithCount;
   }),
 
+  shared: protectedProcedure.query(async ({ ctx }) => {
+    const lists = await db.getListsSharedWithUser(ctx.user.id);
+    const listsWithCount = await Promise.all(
+      lists.map(async (list) => ({
+        ...list,
+        placeCount: await db.getListPlaceCount(list.id),
+        accessRole: await db.getListMemberRole(list.id, ctx.user.id),
+      }))
+    );
+    return listsWithCount;
+  }),
+
   get: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
       const list = await db.getListById(input.id);
       if (!list || list.userId !== ctx.user.id) {
-        return null;
+        const role = list ? await db.getListMemberRole(list.id, ctx.user.id) : null;
+        if (!role) {
+          return null;
+        }
+        const places = await db.getPlacesInList(input.id);
+        return { ...list, places, accessRole: role };
       }
       const places = await db.getPlacesInList(input.id);
-      return { ...list, places };
+      return { ...list, places, accessRole: "owner" as const };
     }),
 
   update: protectedProcedure
@@ -302,7 +416,11 @@ const listRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const list = await db.getListById(input.listId);
-      if (!list || list.userId !== ctx.user.id) {
+      if (!list) {
+        throw new Error("List not found or unauthorized");
+      }
+      const role = await getListAccessRole(list.id, list.userId, ctx.user.id);
+      if (!role || role === "viewer") {
         throw new Error("List not found or unauthorized");
       }
       const place = await db.getPlaceById(input.placeId);
@@ -320,10 +438,80 @@ const listRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const list = await db.getListById(input.listId);
-      if (!list || list.userId !== ctx.user.id) {
+      if (!list) {
+        throw new Error("List not found or unauthorized");
+      }
+      const role = await getListAccessRole(list.id, list.userId, ctx.user.id);
+      if (!role || role === "viewer") {
         throw new Error("List not found or unauthorized");
       }
       await db.removePlaceFromList(input.listId, input.placeId);
+      return { success: true };
+    }),
+
+  members: protectedProcedure
+    .input(z.object({ listId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const list = await db.getListById(input.listId);
+      if (!list) return [];
+      const role = await getListAccessRole(list.id, list.userId, ctx.user.id);
+      if (!role) {
+        throw new Error("List not found or unauthorized");
+      }
+
+      const owner = await db.getUserById(list.userId);
+      const members = await db.getListMembers(input.listId);
+      return [
+        {
+          userId: list.userId,
+          role: "owner" as const,
+          name: owner?.name ?? "",
+          email: owner?.email ?? "",
+        },
+        ...members.filter((member) => member.userId !== list.userId),
+      ];
+    }),
+
+  invite: protectedProcedure
+    .input(z.object({
+      listId: z.number(),
+      email: z.string().email(),
+      role: z.enum(["editor", "viewer"]).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const list = await db.getListById(input.listId);
+      if (!list || list.userId !== ctx.user.id) {
+        throw new Error("List not found or unauthorized");
+      }
+
+      const user = await db.getUserByEmail(input.email);
+      if (!user) {
+        throw new Error("招待先のユーザーが見つかりません");
+      }
+
+      await db.addListMember({
+        listId: input.listId,
+        userId: user.id,
+        role: input.role ?? "viewer",
+        invitedBy: ctx.user.id,
+      });
+      return { success: true };
+    }),
+
+  removeMember: protectedProcedure
+    .input(z.object({
+      listId: z.number(),
+      userId: z.number(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const list = await db.getListById(input.listId);
+      if (!list || list.userId !== ctx.user.id) {
+        throw new Error("List not found or unauthorized");
+      }
+      if (input.userId === list.userId) {
+        throw new Error("オーナーは削除できません");
+      }
+      await db.removeListMember(input.listId, input.userId);
       return { success: true };
     }),
 });

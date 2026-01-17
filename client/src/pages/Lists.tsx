@@ -51,6 +51,9 @@ export default function Lists() {
   const { data: lists, isLoading } = trpc.list.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const { data: sharedLists } = trpc.list.shared.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
 
   const createMutation = trpc.list.create.useMutation({
     onSuccess: () => {
@@ -211,41 +214,79 @@ export default function Lists() {
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
-        ) : lists && lists.length > 0 ? (
-          <div className="space-y-3">
-            {lists.map((list) => (
-              <Link key={list.id} href={`/lists/${list.id}`}>
-                <Card className="cursor-pointer active:scale-[0.98] transition-transform">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: list.color || LIST_COLORS[0].value }}
-                      >
-                        <Folder className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-base truncate">{list.name}</h3>
-                        <p className="text-sm text-muted-foreground">{list.placeCount} 件</p>
-                        {list.description && (
-                          <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                            {list.description}
-                          </p>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 h-10 w-10 text-muted-foreground"
-                        onClick={(e) => handleDelete(list.id, e)}
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
+        ) : (lists && lists.length > 0) || (sharedLists && sharedLists.length > 0) ? (
+          <div className="space-y-6">
+            {lists && lists.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground">マイリスト</p>
+                {lists.map((list) => (
+                  <Link key={list.id} href={`/lists/${list.id}`}>
+                    <Card className="cursor-pointer active:scale-[0.98] transition-transform">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: list.color || LIST_COLORS[0].value }}
+                          >
+                            <Folder className="w-6 h-6 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-base truncate">{list.name}</h3>
+                            <p className="text-sm text-muted-foreground">{list.placeCount} 件</p>
+                            {list.description && (
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                                {list.description}
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0 h-10 w-10 text-muted-foreground"
+                            onClick={(e) => handleDelete(list.id, e)}
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            )}
+            {sharedLists && sharedLists.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground">共有リスト</p>
+                {sharedLists.map((list) => (
+                  <Link key={list.id} href={`/lists/${list.id}`}>
+                    <Card className="cursor-pointer active:scale-[0.98] transition-transform">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                            style={{ backgroundColor: list.color || LIST_COLORS[0].value }}
+                          >
+                            <Folder className="w-6 h-6 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-base truncate">{list.name}</h3>
+                            <p className="text-sm text-muted-foreground">{list.placeCount} 件</p>
+                            {list.description && (
+                              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                                {list.description}
+                              </p>
+                            )}
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {list.accessRole === "editor" ? "編集可" : "閲覧"}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-12">

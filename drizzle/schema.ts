@@ -28,6 +28,7 @@ export type InsertUser = typeof users.$inferInsert;
  * - none: 未設定
  */
 export const placeStatusEnum = mysqlEnum("status", ["none", "want_to_go", "visited"]);
+export const listMemberRoleEnum = mysqlEnum("role", ["owner", "editor", "viewer"]);
 
 export const places = mysqlTable("places", {
   id: int("id").autoincrement().primaryKey(),
@@ -79,6 +80,21 @@ export const lists = mysqlTable("lists", {
 
 export type List = typeof lists.$inferSelect;
 export type InsertList = typeof lists.$inferInsert;
+
+/**
+ * List member table - shared list access
+ */
+export const listMembers = mysqlTable("listMembers", {
+  id: int("id").autoincrement().primaryKey(),
+  listId: int("listId").notNull(),
+  userId: int("userId").notNull(),
+  role: listMemberRoleEnum.default("viewer").notNull(),
+  invitedBy: int("invitedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ListMember = typeof listMembers.$inferSelect;
+export type InsertListMember = typeof listMembers.$inferInsert;
 
 /**
  * ListPlace table - junction table for many-to-many relationship

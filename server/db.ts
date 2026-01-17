@@ -1,6 +1,6 @@
 import { eq, and, like, or, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, places, lists, listPlaces, InsertPlace, InsertList, InsertListPlace, Place, List } from "../drizzle/schema";
+import { InsertUser, users, places, lists, listPlaces, listMembers, InsertPlace, InsertList, InsertListPlace, InsertListMember, Place, List } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -88,6 +88,28 @@ export async function getUserByOpenId(openId: string) {
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
 
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user: database not available");
+    return null;
+  }
+
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user: database not available");
+    return null;
+  }
+
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
 }
 
 // ==================== Place Queries ====================
@@ -200,6 +222,24 @@ export async function getListsByUserId(userId: number): Promise<List[]> {
   return db.select().from(lists).where(eq(lists.userId, userId)).orderBy(sql`${lists.createdAt} DESC`);
 }
 
+export async function getListsSharedWithUser(userId: number): Promise<List[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const relations = await db
+    .select()
+    .from(listMembers)
+    .where(eq(listMembers.userId, userId));
+
+  if (relations.length === 0) return [];
+
+  const listIds = relations.map((relation) => relation.listId);
+  return db
+    .select()
+    .from(lists)
+    .where(and(inArray(lists.id, listIds), sql`${lists.userId} <> ${userId}`));
+}
+
 export async function updateList(id: number, data: Partial<InsertList>): Promise<List | undefined> {
   const db = await getDb();
   if (!db) return undefined;
@@ -213,6 +253,7 @@ export async function deleteList(id: number): Promise<void> {
   if (!db) return;
   
   await db.delete(listPlaces).where(eq(listPlaces.listId, id));
+  await db.delete(listMembers).where(eq(listMembers.listId, id));
   await db.delete(lists).where(eq(lists.id, id));
 }
 
@@ -272,6 +313,72 @@ export async function getListPlaceCount(listId: number): Promise<number> {
     .where(eq(listPlaces.listId, listId));
   
   return result[0]?.count ?? 0;
+}
+
+// ==================== List Member Queries ====================
+
+export async function getListMemberRole(listId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(listMembers)
+    .where(and(eq(listMembers.listId, listId), eq(listMembers.userId, userId)))
+    .limit(1);
+
+  return result[0]?.role ?? null;
+}
+
+export async function addListMember(input: InsertListMember): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const existing = await db
+    .select()
+    .from(listMembers)
+    .where(and(eq(listMembers.listId, input.listId), eq(listMembers.userId, input.userId)))
+    .limit(1);
+
+  if (existing.length === 0) {
+    await db.insert(listMembers).values(input);
+  } else {
+    await db
+      .update(listMembers)
+      .set({ role: input.role })
+      .where(and(eq(listMembers.listId, input.listId), eq(listMembers.userId, input.userId)));
+  }
+}
+
+export async function removeListMember(listId: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .delete(listMembers)
+    .where(and(eq(listMembers.listId, listId), eq(listMembers.userId, userId)));
+}
+
+export async function getListMembers(listId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const relations = await db.select().from(listMembers).where(eq(listMembers.listId, listId));
+
+  if (relations.length === 0) return [];
+
+  const userIds = relations.map((relation) => relation.userId);
+  const usersResult = await db.select().from(users).where(inArray(users.id, userIds));
+
+  return relations.map((relation) => {
+    const user = usersResult.find((u) => u.id === relation.userId);
+    return {
+      userId: relation.userId,
+      role: relation.role,
+      name: user?.name ?? "",
+      email: user?.email ?? "",
+    };
+  });
 }
 
 

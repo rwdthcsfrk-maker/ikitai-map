@@ -4,17 +4,42 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
 import { Link, useParams } from "wouter";
-import { ArrowLeft, ExternalLink, Loader2, MapPin, Star, Trash2, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, ExternalLink, Loader2, MapPin, Star, Trash2, UtensilsCrossed, Users } from "lucide-react";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerFooter,
+  DrawerClose,
+} from "@/components/ui/drawer";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
+import { useState } from "react";
 
 export default function ListDetail() {
   const { id } = useParams<{ id: string }>();
   const listId = parseInt(id || "0");
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"viewer" | "editor">("viewer");
 
   const utils = trpc.useUtils();
   const { data: list, isLoading } = trpc.list.get.useQuery(
     { id: listId },
+    { enabled: isAuthenticated && listId > 0 }
+  );
+  const { data: members } = trpc.list.members.useQuery(
+    { listId },
     { enabled: isAuthenticated && listId > 0 }
   );
 
@@ -27,11 +52,42 @@ export default function ListDetail() {
       toast.error("削除に失敗しました");
     },
   });
+  const inviteMutation = trpc.list.invite.useMutation({
+    onSuccess: () => {
+      utils.list.members.invalidate({ listId });
+      setInviteEmail("");
+      toast.success("共有メンバーを追加しました");
+    },
+    onError: (error) => {
+      toast.error(error.message || "招待に失敗しました");
+    },
+  });
+  const removeMemberMutation = trpc.list.removeMember.useMutation({
+    onSuccess: () => {
+      utils.list.members.invalidate({ listId });
+      toast.success("メンバーを削除しました");
+    },
+    onError: () => {
+      toast.error("削除に失敗しました");
+    },
+  });
 
   const handleRemovePlace = (placeId: number) => {
     if (confirm("この店舗をリストから削除しますか？")) {
       removePlaceMutation.mutate({ listId, placeId });
     }
+  };
+
+  const handleInvite = () => {
+    if (!inviteEmail.trim()) {
+      toast.error("メールアドレスを入力してください");
+      return;
+    }
+    inviteMutation.mutate({
+      listId,
+      email: inviteEmail.trim(),
+      role: inviteRole,
+    });
   };
 
   if (authLoading || isLoading) {
@@ -72,31 +128,40 @@ export default function ListDetail() {
     );
   }
 
+  const canEdit = list.accessRole === "owner" || list.accessRole === "editor";
+  const isOwner = list.accessRole === "owner";
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card px-4 py-3 sticky top-0 z-10">
-        <div className="container flex items-center gap-4">
+        <div className="container flex items-center gap-4 justify-between">
           <Button variant="ghost" size="sm" asChild>
             <Link href="/lists">
               <ArrowLeft className="w-4 h-4 mr-1" />
               リスト
             </Link>
           </Button>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-1">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center"
               style={{ backgroundColor: list.color || "#3b82f6" }}
             >
               <UtensilsCrossed className="w-4 h-4 text-white" />
             </div>
-            <div>
-              <h1 className="font-semibold">{list.name}</h1>
+            <div className="min-w-0">
+              <h1 className="font-semibold truncate">{list.name}</h1>
               {list.description && (
-                <p className="text-xs text-muted-foreground">{list.description}</p>
+                <p className="text-xs text-muted-foreground truncate">{list.description}</p>
               )}
             </div>
           </div>
+          {isOwner && (
+            <Button variant="outline" size="sm" onClick={() => setIsShareOpen(true)}>
+              <Users className="w-4 h-4 mr-1" />
+              共有
+            </Button>
+          )}
         </div>
       </header>
 
@@ -160,14 +225,16 @@ export default function ListDetail() {
                           </a>
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={() => handleRemovePlace(place.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {canEdit && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemovePlace(place.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -187,6 +254,82 @@ export default function ListDetail() {
           </div>
         )}
       </main>
+
+      <Drawer open={isShareOpen} onOpenChange={setIsShareOpen}>
+        <DrawerContent>
+          <DrawerHeader className="border-b">
+            <DrawerTitle>リストを共有</DrawerTitle>
+          </DrawerHeader>
+          <div className="px-4 py-6 space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="invite-email">メールアドレス</Label>
+              <Input
+                id="invite-email"
+                placeholder="example@email.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="h-12"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>権限</Label>
+              <Select value={inviteRole} onValueChange={(value) => setInviteRole(value as "viewer" | "editor")}>
+                <SelectTrigger className="h-12">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="viewer">閲覧のみ</SelectItem>
+                  <SelectItem value="editor">編集可</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>メンバー</Label>
+              <div className="space-y-2">
+                {members?.map((member) => (
+                  <div
+                    key={`${member.userId}-${member.role}`}
+                    className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{member.name || member.email}</p>
+                      <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {member.role === "owner" ? "オーナー" : member.role === "editor" ? "編集可" : "閲覧"}
+                      </span>
+                      {member.role !== "owner" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground"
+                          onClick={() => removeMemberMutation.mutate({ listId, userId: member.userId })}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DrawerFooter className="border-t pt-4">
+            <Button onClick={handleInvite} disabled={inviteMutation.isPending} className="w-full h-12">
+              {inviteMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : null}
+              共有する
+            </Button>
+            <DrawerClose asChild>
+              <Button variant="outline" className="w-full h-12">
+                キャンセル
+              </Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }
