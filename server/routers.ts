@@ -504,69 +504,38 @@ const advancedSearchRouter = router({
     .query(async ({ ctx, input }) => {
       const { callDataApi } = await import("./_core/dataApi");
       
-      // 検索キーワードを構築（まとめ動画ではなく1店舗紹介動画を優先）
-      const keywords: string[] = [];
-      if (input.area) keywords.push(input.area);
-      if (input.genre) keywords.push(input.genre);
-      // 「店名 紹介」「食べてみた」「行ってみた」など単一店舗紹介動画に絞り込む
-      keywords.push("食べてみた", "行ってみた", "レビュー");
-      const searchQuery = keywords.join(" ");
+      const area = input.area?.trim();
+      const genre = input.genre?.trim();
+      const baseKeywords = [area, genre].filter(Boolean).join(" ").trim();
+      const searchQuery = baseKeywords || "東京 グルメ";
+      const targetCount = (input.limit ?? 10) * 4;
+
+      const baseVariants = [
+        baseKeywords,
+        area,
+        genre,
+        area ? `${area} グルメ` : "",
+        genre ? `${genre} グルメ` : "",
+        "",
+      ].filter((value, index, self) => self.indexOf(value) === index);
+
+      const buildQueries = (suffixes: string[]) => {
+        const queries: string[] = [];
+        for (const base of baseVariants) {
+          for (const suffix of suffixes) {
+            const query = `${base} ${suffix}`.trim();
+            if (query) {
+              queries.push(query);
+            }
+          }
+        }
+        if (!baseVariants.some(Boolean)) {
+          queries.push(...suffixes.map((suffix) => `東京 ${suffix}`.trim()));
+        }
+        return Array.from(new Set(queries)).slice(0, 6);
+      };
 
       try {
-        // TikTokで話題のレストランを検索（写真投稿を優先）
-        const tiktokSearchQuery = input.area || input.genre 
-          ? `${input.area || ''} ${input.genre || ''} グルメ おすすめ`.trim()
-          : "東京 グルメ おすすめ 食べ物";
-        // TikTokの写真投稿を検索（動画ではなく写真コンテンツを取得）
-        const tiktokResult = await callDataApi("Tiktok/search_tiktok_video_general", {
-          query: { keyword: tiktokSearchQuery },
-        }) as { data?: Array<{ 
-          desc?: string; 
-          author?: { nickname?: string }; 
-          stats?: { playCount?: number; diggCount?: number };
-          video?: { cover?: string; id?: string };
-          aweme_id?: string;
-          image_post_info?: { images?: Array<{ display_image?: { url_list?: string[] } }> };
-        }> };
-
-        // YouTubeで話題のレストランを検索（単一店舗紹介動画を優先）
-        const youtubeSearchQuery = input.area || input.genre 
-          ? `${input.area || ''} ${input.genre || ''} お店 紹介 食べてみた -まとめ -選`.trim()
-          : "東京 グルメ お店 紹介 食べてみた -まとめ -選";
-        
-        // Instagramで話題のレストランを検索
-        const instagramSearchQuery = input.area || input.genre 
-          ? `${input.area || ''} ${input.genre || ''} グルメ おすすめ`.trim()
-          : "東京 グルメ おすすめ";
-        type InstagramResultType = { data?: { items?: Array<{
-          caption?: { text?: string };
-          user?: { username?: string };
-          like_count?: number;
-          comment_count?: number;
-          image_versions2?: { candidates?: Array<{ url?: string }> };
-          code?: string;
-        }> } };
-        let instagramResult: InstagramResultType | null = null;
-        try {
-          instagramResult = await callDataApi("Instagram/search_hashtag", {
-            query: { name: instagramSearchQuery.replace(/\s+/g, '') },
-          }) as InstagramResultType;
-        } catch (e) {
-          console.warn("[Trending] Instagram search failed:", e);
-        }
-        const youtubeResult = await callDataApi("Youtube/search", {
-          query: { q: youtubeSearchQuery, hl: "ja", gl: "JP" },
-        }) as { contents?: Array<{ 
-          type?: string; 
-          video?: { 
-            title?: string; 
-            channelTitle?: string; 
-            viewCountText?: string; 
-            videoId?: string;
-            thumbnails?: Array<{ url?: string; width?: number; height?: number }>;
-          } 
-        }> };
-
         // 動画タイトルから店舗名を抽出する関数
         const extractStoreName = (text: string): string | null => {
           // 「【店名】」形式
@@ -605,85 +574,159 @@ const advancedSearchRouter = router({
             googleMapsUrl: string;
           };
         }> = [];
+        const tiktokIds = new Set<string>();
+        const youtubeIds = new Set<string>();
+        const instagramIds = new Set<string>();
 
         // TikTokの結果から店舗名を抽出（写真投稿を優先、まとめ動画を除外）
-        if (tiktokResult?.data && Array.isArray(tiktokResult.data)) {
-          for (const post of tiktokResult.data.slice(0, 15)) {
-            if (post.desc) {
-              // まとめ動画を除外（「選」「まとめ」「ランキング」などが含まれるタイトルはスキップ）
-              const isCompilationPost = /\d+選|まとめ|ランキング|全部|全店|全部食べ/.test(post.desc);
-              if (isCompilationPost) continue;
-              
-              const extractedName = extractStoreName(post.desc);
-              
-              // 写真投稿の場合は写真をサムネイルとして使用
-              let thumbnailUrl = post.video?.cover;
-              if (post.image_post_info?.images?.[0]?.display_image?.url_list?.[0]) {
-                thumbnailUrl = post.image_post_info.images[0].display_image.url_list[0];
-              }
-              
-              trendingPlaces.push({
-                name: post.desc.slice(0, 50),
-                source: "TikTok",
-                description: post.desc,
-                engagement: (post.stats?.playCount || 0) + (post.stats?.diggCount || 0),
-                sourceUrl: post.aweme_id ? `https://www.tiktok.com/@${post.author?.nickname || 'user'}/video/${post.aweme_id}` : undefined,
-                thumbnailUrl,
-                extractedStoreName: extractedName || undefined,
-              });
+        const tiktokQueries = buildQueries([
+          "グルメ おすすめ",
+          "人気店",
+          "食べ歩き",
+          "ランチ",
+          "ディナー",
+        ]);
+        for (const tiktokSearchQuery of tiktokQueries) {
+          if (trendingPlaces.length >= targetCount) break;
+          const tiktokResult = await callDataApi("Tiktok/search_tiktok_video_general", {
+            query: { keyword: tiktokSearchQuery },
+          }) as { data?: Array<{ 
+            desc?: string; 
+            author?: { nickname?: string }; 
+            stats?: { playCount?: number; diggCount?: number };
+            video?: { cover?: string; id?: string };
+            aweme_id?: string;
+            image_post_info?: { images?: Array<{ display_image?: { url_list?: string[] } }> };
+          }> };
+
+          if (!tiktokResult?.data || !Array.isArray(tiktokResult.data)) continue;
+          for (const post of tiktokResult.data.slice(0, 20)) {
+            if (!post.desc || !post.aweme_id) continue;
+            if (tiktokIds.has(post.aweme_id)) continue;
+            // まとめ動画を除外（「選」「まとめ」「ランキング」などが含まれるタイトルはスキップ）
+            const isCompilationPost = /\d+選|まとめ|ランキング|全部|全店|全部食べ/.test(post.desc);
+            if (isCompilationPost) continue;
+            
+            const extractedName = extractStoreName(post.desc);
+            let thumbnailUrl = post.video?.cover;
+            if (post.image_post_info?.images?.[0]?.display_image?.url_list?.[0]) {
+              thumbnailUrl = post.image_post_info.images[0].display_image.url_list[0];
             }
+
+            tiktokIds.add(post.aweme_id);
+            trendingPlaces.push({
+              name: post.desc.slice(0, 50),
+              source: "TikTok",
+              description: post.desc,
+              engagement: (post.stats?.playCount || 0) + (post.stats?.diggCount || 0),
+              sourceUrl: `https://www.tiktok.com/@${post.author?.nickname || 'user'}/video/${post.aweme_id}`,
+              thumbnailUrl,
+              extractedStoreName: extractedName || undefined,
+            });
+
+            if (trendingPlaces.length >= targetCount) break;
           }
         }
 
         // Instagramの結果から店舗情報を抽出
-        if (instagramResult?.data?.items && Array.isArray(instagramResult.data.items)) {
-          for (const post of instagramResult.data.items.slice(0, 10)) {
-            if (post.caption?.text) {
-              // まとめ投稿を除外
-              const isCompilationPost = /\d+選|まとめ|ランキング|全部|全店/.test(post.caption.text);
-              if (isCompilationPost) continue;
-              
-              const extractedName = extractStoreName(post.caption.text);
-              const thumbnailUrl = post.image_versions2?.candidates?.[0]?.url;
-              
-              trendingPlaces.push({
-                name: post.caption.text.slice(0, 50),
-                source: "Instagram",
-                description: `@${post.user?.username || 'user'}`,
-                engagement: (post.like_count || 0) + (post.comment_count || 0) * 2,
-                sourceUrl: post.code ? `https://www.instagram.com/p/${post.code}/` : undefined,
-                thumbnailUrl,
-                extractedStoreName: extractedName || undefined,
-              });
-            }
+        const instagramQueries = buildQueries([
+          "グルメおすすめ",
+          "グルメ",
+          "食べ歩き",
+          "ランチ",
+          "ディナー",
+        ]).map((query) => query.replace(/\s+/g, ""));
+        for (const instagramSearchQuery of instagramQueries) {
+          if (trendingPlaces.length >= targetCount) break;
+          let instagramResult: { data?: { items?: Array<{
+            caption?: { text?: string };
+            user?: { username?: string };
+            like_count?: number;
+            comment_count?: number;
+            image_versions2?: { candidates?: Array<{ url?: string }> };
+            code?: string;
+          }> } } | null = null;
+          try {
+            instagramResult = await callDataApi("Instagram/search_hashtag", {
+              query: { name: instagramSearchQuery },
+            }) as typeof instagramResult;
+          } catch (e) {
+            console.warn("[Trending] Instagram search failed:", e);
+            continue;
+          }
+          if (!instagramResult?.data?.items || !Array.isArray(instagramResult.data.items)) continue;
+          for (const post of instagramResult.data.items.slice(0, 12)) {
+            if (!post.caption?.text || !post.code) continue;
+            if (instagramIds.has(post.code)) continue;
+            const isCompilationPost = /\d+選|まとめ|ランキング|全部|全店/.test(post.caption.text);
+            if (isCompilationPost) continue;
+            
+            const extractedName = extractStoreName(post.caption.text);
+            const thumbnailUrl = post.image_versions2?.candidates?.[0]?.url;
+
+            instagramIds.add(post.code);
+            trendingPlaces.push({
+              name: post.caption.text.slice(0, 50),
+              source: "Instagram",
+              description: `@${post.user?.username || 'user'}`,
+              engagement: (post.like_count || 0) + (post.comment_count || 0) * 2,
+              sourceUrl: `https://www.instagram.com/p/${post.code}/`,
+              thumbnailUrl,
+              extractedStoreName: extractedName || undefined,
+            });
+
+            if (trendingPlaces.length >= targetCount) break;
           }
         }
 
         // YouTubeの結果から店舗情報を抽出（まとめ動画を除外）
-        if (youtubeResult?.contents && Array.isArray(youtubeResult.contents)) {
-          for (const content of youtubeResult.contents.slice(0, 10)) {
-            if (content.type === "video" && content.video) {
-              const title = content.video.title || "";
-              // まとめ動画を除外（「選」「まとめ」「ランキング」などが含まれるタイトルはスキップ）
-              const isCompilationVideo = /\d+選|まとめ|ランキング|全部|全店|全部食べ/.test(title);
-              if (isCompilationVideo) continue;
-              
-              // YouTubeサムネイルは標準フォーマットで取得
-              const thumbnailUrl = content.video.videoId 
-                ? `https://img.youtube.com/vi/${content.video.videoId}/mqdefault.jpg`
-                : content.video.thumbnails?.[0]?.url;
-              
-              const extractedName = extractStoreName(title);
-              trendingPlaces.push({
-                name: title,
-                source: "YouTube",
-                description: `${content.video.channelTitle || ""} - ${content.video.viewCountText || ""}回視聴`,
-                engagement: parseInt(content.video.viewCountText?.replace(/[^0-9]/g, "") || "0"),
-                sourceUrl: content.video.videoId ? `https://youtube.com/watch?v=${content.video.videoId}` : undefined,
-                thumbnailUrl,
-                extractedStoreName: extractedName || undefined,
-              });
-            }
+        const youtubeQueries = buildQueries([
+          "お店 紹介 食べてみた -まとめ -選",
+          "グルメ レビュー -まとめ -選",
+          "食べ歩き vlog -まとめ -選",
+          "人気店 紹介 -まとめ -選",
+        ]);
+        for (const youtubeSearchQuery of youtubeQueries) {
+          if (trendingPlaces.length >= targetCount) break;
+          const youtubeResult = await callDataApi("Youtube/search", {
+            query: { q: youtubeSearchQuery, hl: "ja", gl: "JP" },
+          }) as { contents?: Array<{ 
+            type?: string; 
+            video?: { 
+              title?: string; 
+              channelTitle?: string; 
+              viewCountText?: string; 
+              videoId?: string;
+              thumbnails?: Array<{ url?: string; width?: number; height?: number }>;
+            } 
+          }> };
+
+          if (!youtubeResult?.contents || !Array.isArray(youtubeResult.contents)) continue;
+          for (const content of youtubeResult.contents.slice(0, 15)) {
+            if (content.type !== "video" || !content.video?.videoId) continue;
+            if (youtubeIds.has(content.video.videoId)) continue;
+            const title = content.video.title || "";
+            const isCompilationVideo = /\d+選|まとめ|ランキング|全部|全店|全部食べ/.test(title);
+            if (isCompilationVideo) continue;
+            
+            const thumbnailUrl = content.video.videoId 
+              ? `https://img.youtube.com/vi/${content.video.videoId}/mqdefault.jpg`
+              : content.video.thumbnails?.[0]?.url;
+            
+            const extractedName = extractStoreName(title);
+
+            youtubeIds.add(content.video.videoId);
+            trendingPlaces.push({
+              name: title,
+              source: "YouTube",
+              description: `${content.video.channelTitle || ""} - ${content.video.viewCountText || ""}回視聴`,
+              engagement: parseInt(content.video.viewCountText?.replace(/[^0-9]/g, "") || "0"),
+              sourceUrl: `https://youtube.com/watch?v=${content.video.videoId}`,
+              thumbnailUrl,
+              extractedStoreName: extractedName || undefined,
+            });
+
+            if (trendingPlaces.length >= targetCount) break;
           }
         }
 
