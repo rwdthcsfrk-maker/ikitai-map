@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { invokeLLM } from "./_core/llm";
-import { makeRequest, PlacesSearchResult } from "./_core/map";
+import { makeRequest, PlacesSearchResult, PlaceDetailsResult } from "./_core/map";
 import * as db from "./db";
 import { PARENT_GENRES, CHILD_GENRES, BUDGET_BANDS, DISTANCE_OPTIONS, FEATURE_OPTIONS, SORT_OPTIONS, PREFECTURES } from "@shared/masters";
 
@@ -538,18 +538,19 @@ const advancedSearchRouter = router({
         const instagramSearchQuery = input.area || input.genre 
           ? `${input.area || ''} ${input.genre || ''} グルメ おすすめ`.trim()
           : "東京 グルメ おすすめ";
-        let instagramResult: { data?: { items?: Array<{
+        type InstagramResultType = { data?: { items?: Array<{
           caption?: { text?: string };
           user?: { username?: string };
           like_count?: number;
           comment_count?: number;
           image_versions2?: { candidates?: Array<{ url?: string }> };
           code?: string;
-        }> } } | null = null;
+        }> } };
+        let instagramResult: InstagramResultType | null = null;
         try {
           instagramResult = await callDataApi("Instagram/search_hashtag", {
             query: { name: instagramSearchQuery.replace(/\s+/g, '') },
-          }) as typeof instagramResult;
+          }) as InstagramResultType;
         } catch (e) {
           console.warn("[Trending] Instagram search failed:", e);
         }
