@@ -505,6 +505,26 @@ const advancedSearchRouter = router({
         const youtubeSearchQuery = input.area || input.genre 
           ? `${input.area || ''} ${input.genre || ''} お店 紹介 食べてみた -まとめ -選`.trim()
           : "東京 グルメ お店 紹介 食べてみた -まとめ -選";
+        
+        // Instagramで話題のレストランを検索
+        const instagramSearchQuery = input.area || input.genre 
+          ? `${input.area || ''} ${input.genre || ''} グルメ おすすめ`.trim()
+          : "東京 グルメ おすすめ";
+        let instagramResult: { data?: { items?: Array<{
+          caption?: { text?: string };
+          user?: { username?: string };
+          like_count?: number;
+          comment_count?: number;
+          image_versions2?: { candidates?: Array<{ url?: string }> };
+          code?: string;
+        }> } } | null = null;
+        try {
+          instagramResult = await callDataApi("Instagram/search_hashtag", {
+            query: { name: instagramSearchQuery.replace(/\s+/g, '') },
+          }) as typeof instagramResult;
+        } catch (e) {
+          console.warn("[Trending] Instagram search failed:", e);
+        }
         const youtubeResult = await callDataApi("Youtube/search", {
           query: { q: youtubeSearchQuery, hl: "ja", gl: "JP" },
         }) as { contents?: Array<{ 
@@ -586,6 +606,30 @@ const advancedSearchRouter = router({
           }
         }
 
+        // Instagramの結果から店舗情報を抽出
+        if (instagramResult?.data?.items && Array.isArray(instagramResult.data.items)) {
+          for (const post of instagramResult.data.items.slice(0, 10)) {
+            if (post.caption?.text) {
+              // まとめ投稿を除外
+              const isCompilationPost = /\d+選|まとめ|ランキング|全部|全店/.test(post.caption.text);
+              if (isCompilationPost) continue;
+              
+              const extractedName = extractStoreName(post.caption.text);
+              const thumbnailUrl = post.image_versions2?.candidates?.[0]?.url;
+              
+              trendingPlaces.push({
+                name: post.caption.text.slice(0, 50),
+                source: "Instagram",
+                description: `@${post.user?.username || 'user'}`,
+                engagement: (post.like_count || 0) + (post.comment_count || 0) * 2,
+                sourceUrl: post.code ? `https://www.instagram.com/p/${post.code}/` : undefined,
+                thumbnailUrl,
+                extractedStoreName: extractedName || undefined,
+              });
+            }
+          }
+        }
+
         // YouTubeの結果から店舗情報を抽出（まとめ動画を除外）
         if (youtubeResult?.contents && Array.isArray(youtubeResult.contents)) {
           for (const content of youtubeResult.contents.slice(0, 10)) {
@@ -655,7 +699,7 @@ const advancedSearchRouter = router({
         return {
           places: placesWithInfo,
           searchQuery,
-          sources: ["TikTok", "YouTube"],
+          sources: ["TikTok", "YouTube", "Instagram"],
         };
       } catch (error) {
         console.error("Trending search error:", error);

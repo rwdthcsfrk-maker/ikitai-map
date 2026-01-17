@@ -81,6 +81,7 @@ export default function AddPlace() {
   const [isResultsOpen, setIsResultsOpen] = useState(false);
   const [isSaveDrawerOpen, setIsSaveDrawerOpen] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
+  const [selectedArea, setSelectedArea] = useState<string>('');
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
@@ -92,11 +93,25 @@ export default function AddPlace() {
   const { data: trendingData, isLoading: trendingLoading } = trpc.advancedSearch.trending.useQuery(
     {
       limit: 10,
+      area: selectedArea || undefined,
     },
     {
       enabled: isAuthenticated,
     }
   );
+
+  // エリア選択肢
+  const areas = [
+    { id: '', label: '全国' },
+    { id: '渋谷', label: '渋谷' },
+    { id: '新宿', label: '新宿' },
+    { id: '池袋', label: '池袋' },
+    { id: '東京', label: '東京' },
+    { id: '横浜', label: '横浜' },
+    { id: '大阪', label: '大阪' },
+    { id: '京都', label: '京都' },
+    { id: '福岡', label: '福岡' },
+  ];
 
   const createPlaceMutation = trpc.place.create.useMutation({
     onSuccess: (place) => {
@@ -405,6 +420,20 @@ export default function AddPlace() {
                     <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                   )}
                 </div>
+                {/* エリア選択ボタン */}
+                <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide">
+                  {areas.map((area) => (
+                    <Button
+                      key={area.id}
+                      variant={selectedArea === area.id ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-7 px-3 text-xs shrink-0 rounded-full"
+                      onClick={() => setSelectedArea(area.id)}
+                    >
+                      {area.label}
+                    </Button>
+                  ))}
+                </div>
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                   {(trendingData?.places || []).map((place, index) => (
                     <Card
@@ -423,7 +452,7 @@ export default function AddPlace() {
                             }}
                           />
                           <div className={`absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium text-white ${
-                            place.source === 'TikTok' ? 'bg-pink-500' : 'bg-red-500'
+                            place.source === 'TikTok' ? 'bg-pink-500' : place.source === 'Instagram' ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-red-500'
                           }`}>
                             {place.source}
                           </div>
