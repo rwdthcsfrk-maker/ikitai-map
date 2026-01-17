@@ -33,6 +33,7 @@ import {
   CheckCircle,
   SlidersHorizontal,
   ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 import { Link } from "wouter";
 import { getLoginUrl } from "@/const";
