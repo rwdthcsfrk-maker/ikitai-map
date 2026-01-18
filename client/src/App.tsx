@@ -13,6 +13,9 @@ import FilterSearch from "./pages/FilterSearch";
 import MyPage from "./pages/MyPage";
 import TrendingStackMock from "./pages/TrendingStackMock";
 import TrendingRowMock from "./pages/TrendingRowMock";
+import MockHomeOverview from "./pages/MockHomeOverview";
+import MockAddOverview from "./pages/MockAddOverview";
+import MockListsOverview from "./pages/MockListsOverview";
 
 function Router() {
   return (
@@ -26,6 +29,9 @@ function Router() {
       <Route path="/mypage" component={MyPage} />
       <Route path="/mock/trending-stack" component={TrendingStackMock} />
       <Route path="/mock/trending-row" component={TrendingRowMock} />
+      <Route path="/mock/home-overview" component={MockHomeOverview} />
+      <Route path="/mock/add-overview" component={MockAddOverview} />
+      <Route path="/mock/lists-overview" component={MockListsOverview} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
