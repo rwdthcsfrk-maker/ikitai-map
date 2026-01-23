@@ -1,0 +1,1 @@
+ALTER TABLE `listMembers` DROP INDEX `listMembers_listId_userId`;

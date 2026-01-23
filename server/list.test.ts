@@ -120,6 +120,9 @@ vi.mock("./db", () => ({
     }
     return Promise.resolve(undefined);
   }),
+  addListMember: vi.fn().mockResolvedValue(undefined),
+  getListMemberRole: vi.fn().mockResolvedValue(null),
+  getListsSharedWithUser: vi.fn().mockResolvedValue([]),
 }));
 
 describe("list router", () => {

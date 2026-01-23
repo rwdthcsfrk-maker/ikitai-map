@@ -34,6 +34,7 @@ import {
   Globe,
   Beer,
   CheckCircle2,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";

@@ -347,6 +347,7 @@ const listRouter = router({
       lists.map(async (list) => ({
         ...list,
         placeCount: await db.getListPlaceCount(list.id),
+        accessRole: "owner" as const,
       }))
     );
     return listsWithCount;
