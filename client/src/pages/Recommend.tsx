@@ -11,15 +11,12 @@ import {
   MapPin,
   Star,
   Plus,
-  Home as HomeIcon,
-  Search,
-  List,
-  User,
   CheckCircle2,
   Sparkles,
   Navigation,
 } from "lucide-react";
 import { toast } from "sonner";
+import BottomNav from "@/components/BottomNav";
 
 export default function Recommend() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
@@ -241,46 +238,7 @@ export default function Recommend() {
         )}
       </div>
 
-      {/* ボトムナビゲーション */}
       <BottomNav />
     </div>
-  );
-}
-
-function BottomNav() {
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-background border-t safe-area-bottom">
-      <div className="flex items-center justify-around h-16">
-        <Link href="/">
-          <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
-            <HomeIcon className="w-5 h-5" />
-            <span className="text-xs">ホーム</span>
-          </button>
-        </Link>
-        <Link href="/search">
-          <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
-            <Search className="w-5 h-5" />
-            <span className="text-xs">検索</span>
-          </button>
-        </Link>
-        <Link href="/add">
-          <button className="flex flex-col items-center justify-center w-14 h-14 -mt-6 rounded-full bg-primary text-primary-foreground shadow-lg">
-            <Plus className="w-6 h-6" />
-          </button>
-        </Link>
-        <Link href="/lists">
-          <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
-            <List className="w-5 h-5" />
-            <span className="text-xs">リスト</span>
-          </button>
-        </Link>
-        <Link href="/mypage">
-          <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
-            <User className="w-5 h-5" />
-            <span className="text-xs">マイページ</span>
-          </button>
-        </Link>
-      </div>
-    </nav>
   );
 }

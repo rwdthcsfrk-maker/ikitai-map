@@ -16,10 +16,7 @@ import {
   MapPin,
   Star,
   Plus,
-  Home as HomeIcon,
   List,
-  User,
-  Filter,
   ChevronUp,
   X,
   CheckCircle2,
@@ -34,6 +31,7 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import BottomNav from "@/components/BottomNav";
 
 interface PlaceResult {
   placeId: string;
@@ -48,6 +46,34 @@ interface PlaceResult {
 }
 
 type LatLng = { lat: number; lng: number };
+
+const EARTH_RADIUS_KM = 6371;
+
+const getDistanceKm = (from: LatLng, to: LatLng) => {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRad(to.lat - from.lat);
+  const dLng = toRad(to.lng - from.lng);
+  const lat1 = toRad(from.lat);
+  const lat2 = toRad(to.lat);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_RADIUS_KM * c;
+};
+
+const formatDistance = (distanceKm: number) => {
+  if (distanceKm < 1) {
+    const meters = Math.round(distanceKm * 1000);
+    return `${meters}m`;
+  }
+  return `${distanceKm.toFixed(1)}km`;
+};
+
+const formatPriceLevel = (priceLevel?: number) => {
+  if (!priceLevel) return "情報なし";
+  return "￥".repeat(Math.min(Math.max(priceLevel, 1), 4));
+};
 
 export default function AddPlace() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -463,7 +489,7 @@ export default function AddPlace() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 bg-background border-t">
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 bg-background border-t pb-24">
           {/* あなたへのおすすめ */}
           <Card className="border-0 shadow-lg bg-background/95">
             <CardContent className="p-3">
@@ -478,56 +504,15 @@ export default function AddPlace() {
               </div>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                 {(recommendedPlaces || []).map((place) => (
-                  <Card key={place.placeId} className="w-56 shrink-0 border bg-background/90">
-                    <CardContent className="p-3 space-y-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate">{place.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {place.address?.split(" ")[0]}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground mt-1">
-                          根拠: {place.reason}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {place.rating && (
-                          <span className="flex items-center gap-1 text-foreground">
-                            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                            {place.rating}
-                          </span>
-                        )}
-                        {place.userRatingsTotal && (
-                          <span className="text-[10px] text-muted-foreground">
-                            {place.userRatingsTotal}件
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        size="sm"
-                        className="w-full h-8 text-xs"
-                        onClick={() => handleSaveRecommended(place)}
-                        disabled={
-                          createPlaceMutation.isPending ||
-                          savingRecommendedId === place.placeId ||
-                          savedPlaceIds.has(place.placeId)
-                        }
-                      >
-                        {savedPlaceIds.has(place.placeId) ? (
-                          <>
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                            追加済み
-                          </>
-                        ) : savingRecommendedId === place.placeId ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <>
-                            <Plus className="w-3 h-3 mr-1" />
-                            保存する
-                          </>
-                        )}
-                      </Button>
-                    </CardContent>
-                  </Card>
+                  <RecommendedPlaceCard
+                    key={place.placeId}
+                    place={place}
+                    currentLocation={currentLocation}
+                    savedPlaceIds={savedPlaceIds}
+                    savingRecommendedId={savingRecommendedId}
+                    isSaving={createPlaceMutation.isPending}
+                    onSave={handleSaveRecommended}
+                  />
                 ))}
               </div>
             </CardContent>
@@ -678,40 +663,130 @@ export default function AddPlace() {
         </DrawerContent>
       </Drawer>
 
-      {/* Bottom Navigation */}
-      <nav className="border-t bg-card px-2 py-2 safe-area-bottom">
-        <div className="flex items-center justify-around">
-          <Link href="/">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
-              <HomeIcon className="w-5 h-5" />
-              <span className="text-xs">ホーム</span>
-            </Button>
-          </Link>
-          <Link href="/filter">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
-              <Filter className="w-5 h-5" />
-              <span className="text-xs">検索</span>
-            </Button>
-          </Link>
-          <Link href="/add">
-            <Button variant="default" className="h-12 w-12 rounded-full shadow-lg">
-              <Plus className="w-6 h-6" />
-            </Button>
-          </Link>
-          <Link href="/lists">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
-              <List className="w-5 h-5" />
-              <span className="text-xs">リスト</span>
-            </Button>
-          </Link>
-          <Link href="/lists">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
-              <User className="w-5 h-5" />
-              <span className="text-xs">マイページ</span>
-            </Button>
-          </Link>
-        </div>
-      </nav>
+      <BottomNav />
     </div>
+  );
+}
+
+function RecommendedPlaceCard({
+  place,
+  currentLocation,
+  savedPlaceIds,
+  savingRecommendedId,
+  isSaving,
+  onSave,
+}: {
+  place: {
+    placeId: string;
+    name: string;
+    address: string;
+    rating?: number;
+    userRatingsTotal?: number;
+    latitude: number;
+    longitude: number;
+    googleMapsUrl: string;
+    reason: string;
+  };
+  currentLocation: LatLng | null;
+  savedPlaceIds: Set<string>;
+  savingRecommendedId: string | null;
+  isSaving: boolean;
+  onSave: (place: {
+    placeId: string;
+    name: string;
+    address: string;
+    rating?: number;
+    userRatingsTotal?: number;
+    latitude: number;
+    longitude: number;
+    googleMapsUrl: string;
+    reason?: string;
+  }) => void;
+}) {
+  const { data: details, isLoading: detailsLoading } = trpc.place.googleDetails.useQuery(
+    { placeId: place.placeId },
+    { enabled: Boolean(place.placeId) }
+  );
+  const distanceLabel =
+    currentLocation
+      ? formatDistance(
+          getDistanceKm(currentLocation, { lat: place.latitude, lng: place.longitude })
+        )
+      : "現在地未取得";
+  const openingLabel = detailsLoading
+    ? "取得中"
+    : details?.opening_hours
+      ? details.opening_hours.open_now
+        ? "営業中"
+        : "営業時間外"
+      : "情報なし";
+  const priceLabel = detailsLoading ? "取得中" : formatPriceLevel(details?.price_level);
+
+  return (
+    <Card className="w-60 shrink-0 border bg-background/90">
+      <CardContent className="p-3 space-y-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold truncate">{place.name}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {place.address?.split(" ")[0]}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {place.rating && (
+            <span className="flex items-center gap-1 text-foreground">
+              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+              {place.rating}
+            </span>
+          )}
+          {place.userRatingsTotal && (
+            <span className="text-[10px] text-muted-foreground">
+              {place.userRatingsTotal}件
+            </span>
+          )}
+        </div>
+        <div className="rounded-lg bg-muted/40 p-2 text-[10px] text-muted-foreground space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <span>理由</span>
+            <span className="truncate">{place.reason}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span>営業時間</span>
+            <span>{openingLabel}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span>価格帯</span>
+            <span>{priceLabel}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span>距離</span>
+            <span>{distanceLabel}</span>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          className="w-full h-8 text-xs"
+          onClick={() => onSave(place)}
+          disabled={
+            isSaving ||
+            savingRecommendedId === place.placeId ||
+            savedPlaceIds.has(place.placeId)
+          }
+        >
+          {savedPlaceIds.has(place.placeId) ? (
+            <>
+              <CheckCircle2 className="w-3 h-3 mr-1" />
+              追加済み
+            </>
+          ) : savingRecommendedId === place.placeId ? (
+            <Loader2 className="w-3 h-3 animate-spin" />
+          ) : (
+            <>
+              <Plus className="w-3 h-3 mr-1" />
+              保存する
+            </>
+          )}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

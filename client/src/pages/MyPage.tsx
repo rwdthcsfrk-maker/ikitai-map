@@ -15,13 +15,11 @@ import {
   Calendar,
   BarChart3,
   Loader2,
-  Home,
-  Search,
-  Plus,
   ChevronRight
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { PARENT_GENRES } from "@shared/masters";
+import BottomNav from "@/components/BottomNav";
 
 export default function MyPage() {
   const { user, loading: authLoading, logout } = useAuth();
@@ -304,38 +302,5 @@ export default function MyPage() {
 
       <BottomNav />
     </div>
-  );
-}
-
-// ボトムナビゲーション
-function BottomNav() {
-  const [location] = useLocation();
-
-  const navItems = [
-    { href: "/", icon: Home, label: "ホーム" },
-    { href: "/filter", icon: Search, label: "検索" },
-    { href: "/add", icon: Plus, label: "追加" },
-    { href: "/lists", icon: List, label: "リスト" },
-    { href: "/mypage", icon: User, label: "マイページ" },
-  ];
-
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-background border-t z-50 safe-area-bottom">
-      <div className="flex justify-around items-center h-16">
-        {navItems.map((item) => {
-          const isActive = location === item.href;
-          return (
-            <Link key={item.href} href={item.href}>
-              <button className={`flex flex-col items-center gap-1 px-4 py-2 ${
-                isActive ? "text-primary" : "text-muted-foreground"
-              }`}>
-                <item.icon className="w-5 h-5" />
-                <span className="text-xs">{item.label}</span>
-              </button>
-            </Link>
-          );
-        })}
-      </div>
-    </nav>
   );
 }

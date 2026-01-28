@@ -23,12 +23,9 @@ import {
   Loader2,
   Trash2,
   UtensilsCrossed,
-  Home as HomeIcon,
-  Search,
-  List,
-  User,
 } from "lucide-react";
 import { toast } from "sonner";
+import BottomNav from "@/components/BottomNav";
 
 const LIST_COLORS = [
   { name: "レッド", value: "#ef4444" },
@@ -303,40 +300,7 @@ export default function Lists() {
         )}
       </main>
 
-      {/* Bottom Navigation */}
-      <nav className="border-t bg-card px-2 py-2 safe-area-bottom fixed bottom-0 left-0 right-0">
-        <div className="flex items-center justify-around">
-          <Link href="/">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
-              <HomeIcon className="w-5 h-5" />
-              <span className="text-xs">ホーム</span>
-            </Button>
-          </Link>
-          <Link href="/filter">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
-              <Search className="w-5 h-5" />
-              <span className="text-xs">検索</span>
-            </Button>
-          </Link>
-          <Link href="/add">
-            <Button variant="default" className="h-12 w-12 rounded-full shadow-lg">
-              <Plus className="w-6 h-6" />
-            </Button>
-          </Link>
-          <Link href="/lists">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1 text-primary">
-              <List className="w-5 h-5" />
-              <span className="text-xs">リスト</span>
-            </Button>
-          </Link>
-          <Link href="/lists">
-            <Button variant="ghost" className="flex-col h-14 w-16 gap-1">
-              <User className="w-5 h-5" />
-              <span className="text-xs">マイページ</span>
-            </Button>
-          </Link>
-        </div>
-      </nav>
+      <BottomNav />
     </div>
   );
 }

@@ -23,8 +23,6 @@ import {
   X,
   ChevronUp,
   ChevronDown,
-  Home as HomeIcon,
-  User,
   Coffee,
   Utensils,
   Wine,
@@ -37,6 +35,7 @@ import {
 import { toast } from "sonner";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
 import PlaceEditDialog from "@/components/PlaceEditDialog";
+import BottomNav from "@/components/BottomNav";
 import {
   Drawer,
   DrawerContent,
@@ -747,40 +746,7 @@ export default function Home() {
         </>
       )}
 
-      {/* ボトムナビゲーション */}
-      <nav className="bg-background border-t safe-area-bottom">
-        <div className="flex items-center justify-around h-16">
-          <Link href="/">
-            <button className="flex flex-col items-center gap-1 px-3 py-2 text-primary">
-              <HomeIcon className="w-5 h-5" />
-              <span className="text-xs font-medium">ホーム</span>
-            </button>
-          </Link>
-          <Link href="/search">
-            <button className="flex flex-col items-center gap-1 px-3 py-2 text-muted-foreground">
-              <Search className="w-5 h-5" />
-              <span className="text-xs">検索</span>
-            </button>
-          </Link>
-          <Link href="/add">
-            <button className="flex flex-col items-center justify-center w-14 h-14 -mt-6 rounded-full bg-primary text-primary-foreground shadow-lg">
-              <Plus className="w-6 h-6" />
-            </button>
-          </Link>
-          <Link href="/lists">
-            <button className="flex flex-col items-center gap-1 px-3 py-2 text-muted-foreground">
-              <List className="w-5 h-5" />
-              <span className="text-xs">リスト</span>
-            </button>
-          </Link>
-          <Link href="/mypage">
-            <button className="flex flex-col items-center gap-1 px-3 py-2 text-muted-foreground">
-              <User className="w-5 h-5" />
-              <span className="text-xs">マイページ</span>
-            </button>
-          </Link>
-        </div>
-      </nav>
+      <BottomNav />
     </div>
   );
 }

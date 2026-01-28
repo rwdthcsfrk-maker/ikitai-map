@@ -149,6 +149,7 @@ const placeRouter = router({
           "website",
           "rating",
           "user_ratings_total",
+          "price_level",
           "opening_hours",
           "photos",
           "geometry",
