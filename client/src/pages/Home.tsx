@@ -351,7 +351,7 @@ export default function Home() {
       params.set("lng", currentLocation.lng.toString());
     }
     if (params.toString()) {
-      setLocation(`/filter?${params.toString()}`);
+      setLocation(`/search?${params.toString()}`);
     }
   };
 
@@ -583,7 +583,7 @@ export default function Home() {
             </div>
 
             {/* 詳細検索ボタン */}
-            <Link href="/filter">
+            <Link href="/search">
               <Button
                 variant="outline"
                 className="w-full h-12 text-base"

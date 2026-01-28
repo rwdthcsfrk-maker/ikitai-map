@@ -17,27 +17,48 @@ import {
   Heart,
   Check,
   Bookmark,
+  Navigation,
+  SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+  DrawerFooter,
+  DrawerClose,
+} from "@/components/ui/drawer";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
-const FEATURE_OPTIONS = [
-  "個室あり",
-  "カップル向け",
-  "静か",
-  "会食向き",
-  "カジュアル",
-  "高級感",
-  "子連れOK",
-];
-
-const STATUS_OPTIONS = [
-  { value: "want_to_go", label: "行きたい", icon: Heart, color: "text-pink-500" },
-  { value: "visited", label: "訪問済み", icon: Check, color: "text-green-500" },
-] as const;
-
-type PlaceStatus = "none" | "want_to_go" | "visited";
 type LatLng = { lat: number; lng: number };
+type SortOption = "recommended" | "distance" | "rating" | "reviews" | "new";
+type BudgetType = "lunch" | "dinner";
+type StatusFilter = "none" | "want_to_go" | "visited" | undefined;
+type PlaceStatus = "none" | "want_to_go" | "visited";
+
+interface FilterState {
+  location?: { lat: number; lng: number };
+  distanceRadius?: number | null;
+  prefecture?: string;
+  genreParent?: string;
+  genreChild?: string;
+  budgetType?: BudgetType;
+  budgetBand?: string;
+  features?: string[];
+  status?: StatusFilter;
+  sort?: SortOption;
+}
 
 const EARTH_RADIUS_KM = 6371;
 
@@ -71,25 +92,37 @@ export default function Search() {
   const initialQuery = params.get("q") || "";
   const initialFeatures = params.get("features")?.split(",").filter(Boolean) || [];
   const initialGenre = params.get("genre") || "";
-  const initialStatus = (params.get("status") as PlaceStatus) || undefined;
+  const initialStatus = (params.get("status") as StatusFilter) || undefined;
 
   const [searchQuery, setSearchQuery] = useState(initialQuery);
-  const [selectedFeatures, setSelectedFeatures] = useState<string[]>(initialFeatures);
-  const [selectedStatus, setSelectedStatus] = useState<PlaceStatus | undefined>(initialStatus);
   const [isSearching, setIsSearching] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
-  const [sortByDistance, setSortByDistance] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({
+    sort: "recommended",
+    features: initialFeatures.length > 0 ? initialFeatures : undefined,
+    status: initialStatus,
+  });
+  const [tempFilters, setTempFilters] = useState<FilterState>({});
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [page, setPage] = useState(1);
+
+  const { data: genresData } = trpc.master.genres.useQuery();
+  const { data: budgetsData } = trpc.master.budgets.useQuery();
+  const { data: distancesData } = trpc.master.distances.useQuery();
+  const { data: featuresData } = trpc.master.features.useQuery();
+  const { data: sortOptionsData } = trpc.master.sortOptions.useQuery();
+  const { data: prefecturesData } = trpc.master.prefectures.useQuery();
 
   const parseSearchMutation = trpc.ai.parseSearchQuery.useMutation();
-  const { data: searchResults, isLoading } = trpc.place.search.useQuery(
+  const { data: searchResults, isLoading } = trpc.advancedSearch.filter.useQuery(
     {
-      query: initialGenre || initialQuery,
-      features: selectedFeatures.length > 0 ? selectedFeatures : undefined,
-      status: selectedStatus,
+      ...filters,
+      location: currentLocation || undefined,
+      page,
+      limit: 20,
     },
     {
-      enabled:
-        isAuthenticated && (!!initialQuery || selectedFeatures.length > 0 || !!selectedStatus),
+      enabled: isAuthenticated,
     }
   );
   useEffect(() => {
@@ -112,27 +145,60 @@ export default function Search() {
     );
   }, [currentLocation]);
 
+  useEffect(() => {
+    if (!genresData || !initialGenre || filters.genreParent) return;
+    const matchedGenre = genresData.parents.find((genre) =>
+      genre.name.includes(initialGenre)
+    );
+    if (matchedGenre) {
+      setFilters((prev) => ({ ...prev, genreParent: matchedGenre.id }));
+    }
+  }, [genresData, initialGenre, filters.genreParent]);
+
+  const childGenres = useMemo(() => {
+    if (!genresData || !tempFilters.genreParent) return [];
+    return genresData.children[tempFilters.genreParent as keyof typeof genresData.children] || [];
+  }, [genresData, tempFilters.genreParent]);
+
+  const budgetBands = useMemo(() => {
+    if (!budgetsData || !tempFilters.budgetType) return [];
+    return budgetsData[tempFilters.budgetType] || [];
+  }, [budgetsData, tempFilters.budgetType]);
+
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      () => {
+        setCurrentLocation(null);
+      }
+    );
+  };
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
   const sortedSearchResults = useMemo(() => {
-    if (!searchResults) return searchResults;
-    if (!sortByDistance || !currentLocation) return searchResults;
-    const withDistance = searchResults
-      .map((place) => {
-        const lat = place.latitude ? parseFloat(place.latitude) : null;
-        const lng = place.longitude ? parseFloat(place.longitude) : null;
-        const distance = lat !== null && lng !== null
-          ? getDistanceKm(currentLocation, { lat, lng })
-          : null;
-        return { place, distance };
-      })
-      .sort((a, b) => {
-        if (a.distance === null && b.distance === null) return 0;
-        if (a.distance === null) return 1;
-        if (b.distance === null) return -1;
-        return a.distance - b.distance;
-      })
-      .map(({ place }) => place);
-    return withDistance;
-  }, [searchResults, sortByDistance, currentLocation]);
+    const base = searchResults?.places ?? [];
+    if (!normalizedQuery) return base;
+    const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+    return base.filter((place) => {
+      const haystack = [
+        place.name,
+        place.address,
+        place.summary,
+        place.genre,
+        ...(place.features || []),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    });
+  }, [searchResults, normalizedQuery]);
 
   const travelTargets = useMemo(() => {
     if (!sortedSearchResults) return [];
@@ -166,19 +232,32 @@ export default function Search() {
     setIsSearching(true);
     try {
       const result = await parseSearchMutation.mutateAsync({ query: searchQuery });
+      const featureMap: Record<string, string> = {
+        個室あり: "private_room_yes",
+      };
+      const mappedFeatures = (result.features || [])
+        .map((feature) => featureMap[feature])
+        .filter(Boolean);
+      const genreId = genresData?.parents.find(
+        (genre) => genre.name.includes(result.genre || "")
+      )?.id;
+
+      setFilters((prev) => ({
+        ...prev,
+        features: mappedFeatures.length > 0 ? mappedFeatures : prev.features,
+        genreParent: genreId || prev.genreParent,
+      }));
 
       const newParams = new URLSearchParams();
       newParams.set("q", searchQuery);
-
-      if (result.features?.length) {
-        setSelectedFeatures(result.features);
-        newParams.set("features", result.features.join(","));
+      if (mappedFeatures.length > 0) {
+        newParams.set("features", mappedFeatures.join(","));
       }
       if (result.genre) {
         newParams.set("genre", result.genre);
       }
-      if (selectedStatus) {
-        newParams.set("status", selectedStatus);
+      if (filters.status) {
+        newParams.set("status", filters.status);
       }
 
       setLocation(`/search?${newParams.toString()}`);
@@ -189,40 +268,92 @@ export default function Search() {
     }
   };
 
-  const toggleFeature = (feature: string) => {
-    const newFeatures = selectedFeatures.includes(feature)
-      ? selectedFeatures.filter((f) => f !== feature)
-      : [...selectedFeatures, feature];
-
-    setSelectedFeatures(newFeatures);
-
-    const newParams = new URLSearchParams(params);
-    if (newFeatures.length > 0) {
-      newParams.set("features", newFeatures.join(","));
-    } else {
-      newParams.delete("features");
-    }
-    setLocation(`/search?${newParams.toString()}`);
+  const openFilter = () => {
+    setTempFilters({ ...filters });
+    setIsFilterOpen(true);
   };
 
-  const toggleStatus = (status: PlaceStatus) => {
-    const newStatus = selectedStatus === status ? undefined : status;
-    setSelectedStatus(newStatus);
-
-    const newParams = new URLSearchParams(params);
-    if (newStatus) {
-      newParams.set("status", newStatus);
-    } else {
-      newParams.delete("status");
-    }
-    setLocation(`/search?${newParams.toString()}`);
+  const applyFilters = () => {
+    setFilters({ ...tempFilters });
+    setPage(1);
+    setIsFilterOpen(false);
   };
 
   const clearFilters = () => {
-    setSelectedFeatures([]);
-    setSelectedStatus(undefined);
-    setSearchQuery("");
-    setLocation("/search");
+    setTempFilters({ sort: "recommended" });
+  };
+
+  const removeFilter = (key: keyof FilterState) => {
+    const nextFilters = { ...filters };
+    delete nextFilters[key];
+    if (key === "genreParent") {
+      delete nextFilters.genreChild;
+    }
+    if (key === "budgetType") {
+      delete nextFilters.budgetBand;
+    }
+    setFilters(nextFilters);
+  };
+
+  const toggleFeature = (featureId: string) => {
+    setTempFilters((prev) => {
+      const currentFeatures = prev.features || [];
+      if (currentFeatures.includes(featureId)) {
+        return { ...prev, features: currentFeatures.filter((f) => f !== featureId) };
+      }
+      return { ...prev, features: [...currentFeatures, featureId] };
+    });
+  };
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.distanceRadius) count++;
+    if (filters.prefecture) count++;
+    if (filters.genreParent) count++;
+    if (filters.budgetBand) count++;
+    if (filters.features && filters.features.length > 0) count += filters.features.length;
+    if (filters.status) count++;
+    return count;
+  }, [filters]);
+
+  const getFilterLabel = (key: string, value: string | undefined): string => {
+    if (!value) return "";
+    switch (key) {
+      case "genreParent":
+        return genresData?.parents.find((g) => g.id === value)?.name || value;
+      case "genreChild":
+        if (filters.genreParent && genresData) {
+          const children =
+            genresData.children[filters.genreParent as keyof typeof genresData.children];
+          return children?.find((g) => g.id === value)?.name || value;
+        }
+        return value;
+      case "prefecture":
+        return prefecturesData?.find((p) => p.id === value)?.name || value;
+      case "distanceRadius":
+        return (
+          distancesData?.find((d) => d.meters === Number(value))?.label || `${value}m`
+        );
+      case "budgetBand":
+        if (filters.budgetType && budgetsData) {
+          const bands = budgetsData[filters.budgetType];
+          return bands?.find((b) => b.id === value)?.label || value;
+        }
+        return value;
+      case "status":
+        return value === "want_to_go" ? "行きたい" : value === "visited" ? "訪問済み" : "";
+      default:
+        return String(value);
+    }
+  };
+
+  const getFeatureLabel = (featureId: string): string => {
+    if (!featuresData) return featureId;
+    for (const category of Object.values(featuresData)) {
+      const match = category.options.find((option) => option.id === featureId);
+      if (match) return match.label;
+    }
+    return featureId;
   };
 
   const getStatusIcon = (status: PlaceStatus) => {
@@ -297,62 +428,403 @@ export default function Search() {
         </div>
       </header>
 
-      {/* Filters - スマホ最適化 */}
-      <div className="px-4 py-3 border-b bg-card space-y-3">
-        {/* Status Filters */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-muted-foreground">ステータス</span>
-            {(selectedFeatures.length > 0 || selectedStatus) && (
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={clearFilters}>
-                <X className="w-3 h-3 mr-1" />
-                クリア
-              </Button>
-            )}
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
-            {STATUS_OPTIONS.map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                type="button"
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition-colors border whitespace-nowrap ${
-                  selectedStatus === value
-                    ? value === "want_to_go"
-                      ? "bg-pink-100 border-pink-300 text-pink-700"
-                      : "bg-green-100 border-green-300 text-green-700"
-                    : "bg-background border-border"
-                }`}
-                onClick={() => toggleStatus(value)}
-              >
-                <Icon
-                  className={`w-4 h-4 ${selectedStatus === value && value === "want_to_go" ? "fill-pink-500" : ""}`}
-                />
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Filter Bar */}
+      <div className="bg-muted/30 border-b">
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Drawer open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+              <DrawerTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="flex-1 justify-between h-11"
+                  onClick={openFilter}
+                >
+                  <span className="flex items-center">
+                    <SlidersHorizontal className="h-4 w-4 mr-2" />
+                    絞り込み条件
+                  </span>
+                  {activeFilterCount > 0 && (
+                    <Badge variant="secondary" className="ml-2">
+                      {activeFilterCount}
+                    </Badge>
+                  )}
+                </Button>
+              </DrawerTrigger>
+              <DrawerContent className="max-h-[90vh] flex flex-col">
+                <DrawerHeader className="border-b pb-4 shrink-0">
+                  <div className="flex items-center justify-between">
+                    <DrawerTitle>絞り込み条件</DrawerTitle>
+                    <Button variant="ghost" size="sm" onClick={clearFilters}>
+                      クリア
+                    </Button>
+                  </div>
+                </DrawerHeader>
+                <div className="flex-1 overflow-y-auto px-4">
+                  <div className="py-4 space-y-6">
+                    {/* エリア・距離 */}
+                    <div>
+                      <h3 className="font-medium mb-3 text-base">エリア・距離</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-sm text-muted-foreground mb-2 block">
+                            現在地からの距離
+                          </label>
+                          <Select
+                            value={tempFilters.distanceRadius?.toString() || "any"}
+                            onValueChange={(value) =>
+                              setTempFilters((prev) => ({
+                                ...prev,
+                                distanceRadius: value === "any" ? null : Number(value),
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="h-12">
+                              <SelectValue placeholder="指定なし" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {distancesData?.map((distance) => (
+                                <SelectItem
+                                  key={distance.id}
+                                  value={distance.meters?.toString() || "any"}
+                                >
+                                  {distance.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-sm text-muted-foreground mb-2 block">
+                            都道府県
+                          </label>
+                          <Select
+                            value={tempFilters.prefecture || "any"}
+                            onValueChange={(value) =>
+                              setTempFilters((prev) => ({
+                                ...prev,
+                                prefecture: value === "any" ? undefined : value,
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="h-12">
+                              <SelectValue placeholder="指定なし" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="any">指定なし</SelectItem>
+                              {prefecturesData?.map((pref) => (
+                                <SelectItem key={pref.id} value={pref.id}>
+                                  {pref.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
 
-        {/* Feature Filters */}
-        <div>
-          <span className="text-xs font-medium text-muted-foreground mb-2 block">こだわり条件</span>
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
-            {FEATURE_OPTIONS.map((feature) => (
-              <button
-                key={feature}
-                type="button"
-                className={`px-3 py-2 rounded-full text-sm font-medium transition-colors border whitespace-nowrap ${
-                  selectedFeatures.includes(feature)
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border"
-                }`}
-                onClick={() => toggleFeature(feature)}
-              >
-                {feature}
-              </button>
-            ))}
+                    <Separator />
+
+                    {/* ジャンル */}
+                    <div>
+                      <h3 className="font-medium mb-3 text-base">ジャンル</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-sm text-muted-foreground mb-2 block">
+                            大ジャンル
+                          </label>
+                          <Select
+                            value={tempFilters.genreParent || "any"}
+                            onValueChange={(value) =>
+                              setTempFilters((prev) => ({
+                                ...prev,
+                                genreParent: value === "any" ? undefined : value,
+                                genreChild: undefined,
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="h-12">
+                              <SelectValue placeholder="指定なし" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="any">指定なし</SelectItem>
+                              {genresData?.parents.map((genre) => (
+                                <SelectItem key={genre.id} value={genre.id}>
+                                  {genre.icon} {genre.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {tempFilters.genreParent && childGenres.length > 0 && (
+                          <div>
+                            <label className="text-sm text-muted-foreground mb-2 block">
+                              小ジャンル
+                            </label>
+                            <Select
+                              value={tempFilters.genreChild || "any"}
+                              onValueChange={(value) =>
+                                setTempFilters((prev) => ({
+                                  ...prev,
+                                  genreChild: value === "any" ? undefined : value,
+                                }))
+                              }
+                            >
+                              <SelectTrigger className="h-12">
+                                <SelectValue placeholder="指定なし" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="any">指定なし</SelectItem>
+                                {childGenres.map((genre) => (
+                                  <SelectItem key={genre.id} value={genre.id}>
+                                    {genre.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* 予算 */}
+                    <div>
+                      <h3 className="font-medium mb-3 text-base">予算</h3>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant={tempFilters.budgetType === "lunch" ? "default" : "outline"}
+                            className="h-12"
+                            onClick={() =>
+                              setTempFilters((prev) => ({
+                                ...prev,
+                                budgetType: "lunch",
+                                budgetBand: undefined,
+                              }))
+                            }
+                          >
+                            ランチ
+                          </Button>
+                          <Button
+                            variant={tempFilters.budgetType === "dinner" ? "default" : "outline"}
+                            className="h-12"
+                            onClick={() =>
+                              setTempFilters((prev) => ({
+                                ...prev,
+                                budgetType: "dinner",
+                                budgetBand: undefined,
+                              }))
+                            }
+                          >
+                            ディナー
+                          </Button>
+                        </div>
+                        {tempFilters.budgetType && budgetBands.length > 0 && (
+                          <div>
+                            <label className="text-sm text-muted-foreground mb-2 block">
+                              予算帯
+                            </label>
+                            <Select
+                              value={tempFilters.budgetBand || "any"}
+                              onValueChange={(value) =>
+                                setTempFilters((prev) => ({
+                                  ...prev,
+                                  budgetBand: value === "any" ? undefined : value,
+                                }))
+                              }
+                            >
+                              <SelectTrigger className="h-12">
+                                <SelectValue placeholder="指定なし" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="any">指定なし</SelectItem>
+                                {budgetBands.map((band) => (
+                                  <SelectItem key={band.id} value={band.id}>
+                                    {band.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* ステータス */}
+                    <div>
+                      <h3 className="font-medium mb-3 text-base">ステータス</h3>
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button
+                          variant={!tempFilters.status ? "default" : "outline"}
+                          className="h-12"
+                          onClick={() =>
+                            setTempFilters((prev) => ({ ...prev, status: undefined }))
+                          }
+                        >
+                          すべて
+                        </Button>
+                        <Button
+                          variant={tempFilters.status === "want_to_go" ? "default" : "outline"}
+                          className="h-12"
+                          onClick={() =>
+                            setTempFilters((prev) => ({ ...prev, status: "want_to_go" }))
+                          }
+                        >
+                          <Heart className="h-4 w-4 mr-1" />
+                          行きたい
+                        </Button>
+                        <Button
+                          variant={tempFilters.status === "visited" ? "default" : "outline"}
+                          className="h-12"
+                          onClick={() =>
+                            setTempFilters((prev) => ({ ...prev, status: "visited" }))
+                          }
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          訪問済
+                        </Button>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* こだわり条件 */}
+                    <div>
+                      <h3 className="font-medium mb-3 text-base">こだわり条件</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {featuresData &&
+                          Object.entries(featuresData).map(([category, data]) =>
+                            data.options.map((option) => (
+                              <Button
+                                key={`${category}-${option.id}`}
+                                variant={
+                                  tempFilters.features?.includes(option.id) ? "default" : "outline"
+                                }
+                                size="sm"
+                                className="h-10"
+                                onClick={() => toggleFeature(option.id)}
+                              >
+                                {option.label}
+                              </Button>
+                            ))
+                          )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <DrawerFooter className="border-t pt-4 shrink-0">
+                  <Button onClick={applyFilters} className="w-full h-12 text-base">
+                    この条件で検索（{searchResults?.total || 0}件）
+                  </Button>
+                  <DrawerClose asChild>
+                    <Button variant="outline" className="w-full h-12">
+                      閉じる
+                    </Button>
+                  </DrawerClose>
+                </DrawerFooter>
+              </DrawerContent>
+            </Drawer>
+            <Button
+              variant={currentLocation ? "default" : "outline"}
+              size="sm"
+              onClick={handleGetLocation}
+              className="h-11 px-3"
+            >
+              <Navigation className="h-4 w-4 mr-1" />
+              {currentLocation ? "ON" : "現在地"}
+            </Button>
           </div>
+
+          {activeFilterCount > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {filters.genreParent && (
+                <Badge variant="secondary" className="h-8 gap-1 px-3">
+                  {getFilterLabel("genreParent", filters.genreParent)}
+                  <X
+                    className="h-3 w-3 cursor-pointer ml-1"
+                    onClick={() => removeFilter("genreParent")}
+                  />
+                </Badge>
+              )}
+              {filters.prefecture && (
+                <Badge variant="secondary" className="h-8 gap-1 px-3">
+                  {getFilterLabel("prefecture", filters.prefecture)}
+                  <X
+                    className="h-3 w-3 cursor-pointer ml-1"
+                    onClick={() => removeFilter("prefecture")}
+                  />
+                </Badge>
+              )}
+              {filters.distanceRadius && (
+                <Badge variant="secondary" className="h-8 gap-1 px-3">
+                  {distancesData?.find((d) => d.meters === filters.distanceRadius)?.label}
+                  <X
+                    className="h-3 w-3 cursor-pointer ml-1"
+                    onClick={() => removeFilter("distanceRadius")}
+                  />
+                </Badge>
+              )}
+              {filters.budgetBand && (
+                <Badge variant="secondary" className="h-8 gap-1 px-3">
+                  {getFilterLabel("budgetBand", filters.budgetBand)}
+                  <X
+                    className="h-3 w-3 cursor-pointer ml-1"
+                    onClick={() => removeFilter("budgetBand")}
+                  />
+                </Badge>
+              )}
+              {filters.status && (
+                <Badge variant="secondary" className="h-8 gap-1 px-3">
+                  {getFilterLabel("status", filters.status)}
+                  <X
+                    className="h-3 w-3 cursor-pointer ml-1"
+                    onClick={() => removeFilter("status")}
+                  />
+                </Badge>
+              )}
+              {filters.features?.map((featureId) => (
+                <Badge key={featureId} variant="secondary" className="h-8 gap-1 px-3">
+                  {getFeatureLabel(featureId)}
+                  <X
+                    className="h-3 w-3 cursor-pointer ml-1"
+                    onClick={() =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        features: prev.features?.filter((f) => f !== featureId),
+                      }))
+                    }
+                  />
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
+      </div>
+
+      <div className="px-4 py-3 flex items-center justify-between border-b">
+        <Select
+          value={filters.sort || "recommended"}
+          onValueChange={(value) =>
+            setFilters((prev) => ({ ...prev, sort: value as SortOption }))
+          }
+        >
+          <SelectTrigger className="w-[150px] h-10">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {sortOptionsData?.map((sortOption) => (
+              <SelectItem key={sortOption.id} value={sortOption.id}>
+                {sortOption.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="text-sm text-muted-foreground">
+          {sortedSearchResults.length}件
+        </span>
       </div>
 
       {/* Results */}
@@ -363,19 +835,6 @@ export default function Search() {
           </div>
         ) : sortedSearchResults && sortedSearchResults.length > 0 ? (
           <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                {sortedSearchResults.length} 件の店舗
-              </p>
-              <Button
-                variant={sortByDistance ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSortByDistance((prev) => !prev)}
-                disabled={!currentLocation}
-              >
-                近い順
-              </Button>
-            </div>
             {sortedSearchResults.map((place) => {
               const lat = place.latitude ? parseFloat(place.latitude) : null;
               const lng = place.longitude ? parseFloat(place.longitude) : null;
@@ -452,11 +911,7 @@ export default function Search() {
                             {place.features.slice(0, 3).map((feature, i) => (
                               <span
                                 key={i}
-                                className={`text-xs px-2 py-0.5 rounded-full border ${
-                                  selectedFeatures.includes(feature)
-                                    ? "bg-primary/10 border-primary text-primary"
-                                    : "bg-muted border-transparent"
-                                }`}
+                                className="text-xs px-2 py-0.5 rounded-full border bg-muted border-transparent"
                               >
                                 {feature}
                               </span>
@@ -489,8 +944,9 @@ export default function Search() {
                 </Card>
               );
             })}
+
           </div>
-        ) : initialQuery || selectedFeatures.length > 0 || selectedStatus ? (
+        ) : searchQuery.trim() || activeFilterCount > 0 ? (
           <div className="text-center py-12">
             <SearchIcon className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
             <p className="text-muted-foreground">該当する店舗がありません</p>
