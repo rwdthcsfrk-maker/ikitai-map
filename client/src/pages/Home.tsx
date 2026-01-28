@@ -35,6 +35,7 @@ import {
   Beer,
   CheckCircle2,
   Star,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
@@ -82,7 +83,6 @@ export default function Home() {
   const [isLocating, setIsLocating] = useState(false);
   const [isPlaceListOpen, setIsPlaceListOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
-  const [savingRecommendedId, setSavingRecommendedId] = useState<string | null>(null);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
 
@@ -95,15 +95,6 @@ export default function Home() {
   const { data: places, isLoading: placesLoading } = trpc.place.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
-  const { data: recommendedPlaces, isLoading: recommendedLoading } = trpc.place.recommended.useQuery(
-    {
-      location: currentLocation ?? undefined,
-      limit: 6,
-    },
-    {
-      enabled: isAuthenticated,
-    }
-  );
   const savedPlaceIds = new Set(
     (places || [])
       .map((place) => place.googlePlaceId)
@@ -128,38 +119,45 @@ export default function Home() {
 
   const handleMapReady = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
-  }, []);
+    // マップが準備できたらすぐに現在地を取得して中心に設定
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setCurrentLocation({ lat: latitude, lng: longitude });
+          mapInstance.panTo({ lat: latitude, lng: longitude });
+          mapInstance.setZoom(16);
 
-  const handleSaveRecommended = (place: {
-    placeId: string;
-    name: string;
-    address: string;
-    rating?: number;
-    latitude: number;
-    longitude: number;
-    googleMapsUrl: string;
-  }) => {
-    if (savedPlaceIds.has(place.placeId)) {
-      toast.success("すでに追加済みです");
-      return;
+          // 現在地マーカーを追加
+          const locationPin = document.createElement("div");
+          locationPin.innerHTML = `
+            <div style="
+              width: 24px;
+              height: 24px;
+              background: #3b82f6;
+              border: 3px solid white;
+              border-radius: 50%;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            "></div>
+          `;
+          currentLocationMarkerRef.current = new google.maps.marker.AdvancedMarkerElement({
+            map: mapInstance,
+            position: { lat: latitude, lng: longitude },
+            content: locationPin,
+            title: "現在地",
+          });
+        },
+        () => {
+          // 位置情報取得失敗時はデフォルトの東京駅を表示
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 5000,
+          maximumAge: 60000,
+        }
+      );
     }
-    setSavingRecommendedId(place.placeId);
-    createPlaceMutation.mutate(
-      {
-        googlePlaceId: place.placeId,
-        name: place.name,
-        address: place.address,
-        latitude: place.latitude,
-        longitude: place.longitude,
-        rating: place.rating,
-        source: "Google",
-        googleMapsUrl: place.googleMapsUrl,
-      },
-      {
-        onSettled: () => setSavingRecommendedId(null),
-      }
-    );
-  };
+  }, []);
 
   // 現在地を取得
   const getCurrentLocation = useCallback((options?: { showToast?: boolean }) => {
@@ -236,10 +234,7 @@ export default function Home() {
     );
   }, [map]);
 
-  useEffect(() => {
-    if (!map || currentLocation) return;
-    getCurrentLocation({ showToast: false });
-  }, [map, currentLocation, getCurrentLocation]);
+  // 現在地の自動取得はhandleMapReadyで実行するためここでは不要
 
   // フィルタリングされた店舗
   const filteredPlaces = places?.filter((place) => {
@@ -605,75 +600,6 @@ export default function Home() {
       <div className="flex-1 relative">
         <MapView onMapReady={handleMapReady} />
 
-        {/* あなたへのおすすめ */}
-        {recommendedPlaces && recommendedPlaces.length > 0 && (
-          <div className="absolute top-14 left-3 right-3 z-10">
-            <Card className="border-0 shadow-lg bg-background/95 backdrop-blur">
-              <CardContent className="p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className="text-sm font-semibold">あなたへのおすすめ</p>
-                    <p className="text-xs text-muted-foreground">保存した傾向からピックアップ</p>
-                  </div>
-                  {recommendedLoading && (
-                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                  {recommendedPlaces.map((place) => (
-                    <Card
-                      key={place.placeId}
-                      className="w-56 shrink-0 border bg-background/90"
-                    >
-                      <CardContent className="p-3 space-y-2">
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold truncate">{place.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {place.address?.split(" ")[0]}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground mt-1">{place.reason}</p>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {place.rating && (
-                            <span className="flex items-center gap-1 text-foreground">
-                              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                              {place.rating}
-                            </span>
-                          )}
-                        </div>
-                        <Button
-                          size="sm"
-                          className="w-full h-8 text-xs"
-                          onClick={() => handleSaveRecommended(place)}
-                          disabled={
-                            createPlaceMutation.isPending ||
-                            savingRecommendedId === place.placeId ||
-                            savedPlaceIds.has(place.placeId)
-                          }
-                        >
-                          {savedPlaceIds.has(place.placeId) ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3 mr-1" />
-                              追加済み
-                            </>
-                          ) : savingRecommendedId === place.placeId ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <>
-                              <Plus className="w-3 h-3 mr-1" />
-                              保存する
-                            </>
-                          )}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
         {/* 件数バッジ */}
         <div className="absolute top-3 left-3 bg-background/95 backdrop-blur px-3 py-1.5 rounded-full shadow-lg text-sm font-medium">
           {filteredPlaces?.length ?? 0} 件
@@ -823,15 +749,15 @@ export default function Home() {
       <nav className="bg-background border-t safe-area-bottom">
         <div className="flex items-center justify-around h-16">
           <Link href="/">
-            <button className="flex flex-col items-center gap-1 px-4 py-2 text-primary">
+            <button className="flex flex-col items-center gap-1 px-3 py-2 text-primary">
               <HomeIcon className="w-5 h-5" />
               <span className="text-xs font-medium">ホーム</span>
             </button>
           </Link>
-          <Link href="/search">
-            <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
-              <Search className="w-5 h-5" />
-              <span className="text-xs">検索</span>
+          <Link href="/recommend">
+            <button className="flex flex-col items-center gap-1 px-3 py-2 text-muted-foreground">
+              <Sparkles className="w-5 h-5" />
+              <span className="text-xs">おすすめ</span>
             </button>
           </Link>
           <Link href="/add">
@@ -840,13 +766,13 @@ export default function Home() {
             </button>
           </Link>
           <Link href="/lists">
-            <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
+            <button className="flex flex-col items-center gap-1 px-3 py-2 text-muted-foreground">
               <List className="w-5 h-5" />
               <span className="text-xs">リスト</span>
             </button>
           </Link>
-          <Link href="/profile">
-            <button className="flex flex-col items-center gap-1 px-4 py-2 text-muted-foreground">
+          <Link href="/mypage">
+            <button className="flex flex-col items-center gap-1 px-3 py-2 text-muted-foreground">
               <User className="w-5 h-5" />
               <span className="text-xs">マイページ</span>
             </button>

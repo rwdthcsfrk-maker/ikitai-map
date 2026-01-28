@@ -16,6 +16,7 @@ import TrendingRowMock from "./pages/TrendingRowMock";
 import MockHomeOverview from "./pages/MockHomeOverview";
 import MockAddOverview from "./pages/MockAddOverview";
 import MockListsOverview from "./pages/MockListsOverview";
+import Recommend from "./pages/Recommend";
 
 function Router() {
   return (
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/mock/home-overview" component={MockHomeOverview} />
       <Route path="/mock/add-overview" component={MockAddOverview} />
       <Route path="/mock/lists-overview" component={MockListsOverview} />
+      <Route path="/recommend" component={Recommend} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
