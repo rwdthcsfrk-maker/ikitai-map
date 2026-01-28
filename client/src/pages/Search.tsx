@@ -22,7 +22,6 @@ import {
   List,
   User,
   Filter,
-  TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -86,7 +85,6 @@ export default function Search() {
   const [sortByDistance, setSortByDistance] = useState(false);
 
   const parseSearchMutation = trpc.ai.parseSearchQuery.useMutation();
-  const trendingQuery = (initialGenre || initialQuery).trim();
   const { data: searchResults, isLoading } = trpc.place.search.useQuery(
     {
       query: initialGenre || initialQuery,
@@ -98,16 +96,6 @@ export default function Search() {
         isAuthenticated && (!!initialQuery || selectedFeatures.length > 0 || !!selectedStatus),
     }
   );
-  const { data: trendingPlaces, isLoading: trendingLoading } = trpc.place.trending.useQuery(
-    {
-      query: trendingQuery ? trendingQuery : undefined,
-      location: currentLocation ?? undefined,
-    },
-    {
-      enabled: isAuthenticated,
-    }
-  );
-
   useEffect(() => {
     if (!navigator.geolocation || currentLocation) return;
     navigator.geolocation.getCurrentPosition(
@@ -350,68 +338,6 @@ export default function Search() {
 
       {/* Results */}
       <main className="flex-1 px-4 py-4 pb-24 overflow-y-auto">
-        {(trendingLoading || (trendingPlaces && trendingPlaces.length > 0)) && (
-          <section className="mb-5">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <TrendingUp className="w-4 h-4 text-orange-500" />
-                最近話題のお店
-              </div>
-              {trendingQuery && (
-                <span className="text-xs text-muted-foreground">
-                  「{trendingQuery}」周辺
-                </span>
-              )}
-            </div>
-            {trendingLoading ? (
-              <div className="flex justify-center py-6">
-                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {trendingPlaces?.map((place) => (
-                  <Card key={place.placeId} className="active:scale-[0.98] transition-transform">
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm truncate">{place.name}</h3>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2 flex-wrap">
-                            {place.rating && (
-                              <span className="flex items-center gap-0.5">
-                                <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                                {place.rating}
-                              </span>
-                            )}
-                            {place.userRatingsTotal && (
-                              <span className="flex items-center gap-0.5">
-                                <TrendingUp className="w-3 h-3 text-orange-500" />
-                                {place.userRatingsTotal.toLocaleString()} 口コミ
-                              </span>
-                            )}
-                            {place.address && (
-                              <span className="flex items-center gap-1 truncate">
-                                <MapPin className="w-3 h-3" />
-                                {place.address}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {place.googleMapsUrl && (
-                          <Button variant="ghost" size="icon" className="shrink-0 h-10 w-10" asChild>
-                            <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />

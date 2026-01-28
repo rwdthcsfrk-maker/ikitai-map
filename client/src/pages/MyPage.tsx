@@ -266,7 +266,7 @@ export default function MyPage() {
             <CardContent>
               <div className="space-y-3">
                 {detailedStats.visitHistory.slice(0, 5).map((item) => (
-                  <Link key={item.id} href="/">
+                  <Link key={item.id} href={`/?placeId=${encodeURIComponent(item.id)}`}>
                     <div className="flex items-center justify-between py-2 border-b last:border-0 cursor-pointer hover:bg-muted/50 -mx-2 px-2 rounded">
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{item.name}</p>
@@ -320,7 +320,7 @@ function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-background border-t z-50">
+    <nav className="fixed bottom-0 left-0 right-0 bg-background border-t z-50 safe-area-bottom">
       <div className="flex justify-around items-center h-16">
         {navItems.map((item) => {
           const isActive = location === item.href;

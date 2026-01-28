@@ -80,6 +80,7 @@ export default function Home() {
   const [isLocating, setIsLocating] = useState(false);
   const [isPlaceListOpen, setIsPlaceListOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
+  const [initialPlaceHandled, setInitialPlaceHandled] = useState(false);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
 
@@ -379,6 +380,24 @@ export default function Home() {
   };
 
   const selectedPlaceData = filteredPlaces?.find((p) => p.id === selectedPlace);
+
+  useEffect(() => {
+    if (initialPlaceHandled || !places) return;
+    const params = new URLSearchParams(window.location.search);
+    const placeIdParam = params.get("placeId");
+    if (!placeIdParam) return;
+
+    const placeId = Number(placeIdParam);
+    if (!Number.isNaN(placeId)) {
+      const exists = places.some((place) => place.id === placeId);
+      if (exists) {
+        setSelectedPlace(placeId);
+        setDetailDialogOpen(true);
+      }
+    }
+    setInitialPlaceHandled(true);
+    window.history.replaceState({}, "", window.location.pathname);
+  }, [initialPlaceHandled, places]);
 
   const getStatusIcon = (status: PlaceStatus) => {
     switch (status) {
