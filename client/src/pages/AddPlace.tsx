@@ -545,7 +545,7 @@ export default function AddPlace() {
           initialZoom={12}
         />
 
-        {/* SNSで話題のお店 */}
+        {/* SNSで話題のお店 - 縮小版 */}
         {!selectedPlace && (
           <div className="absolute top-3 left-3 right-3 z-10">
             <Card className="border-0 shadow-lg bg-gradient-to-r from-pink-50 to-red-50/80 dark:from-pink-950/40 dark:to-red-950/30">
@@ -580,7 +580,7 @@ export default function AddPlace() {
                     </Button>
                   ))}
                 </div>
-                <div className="h-[60vh] overflow-y-auto snap-y snap-mandatory pr-1">
+                <div className="max-h-[30vh] overflow-y-auto snap-y snap-mandatory pr-1">
                   <div className="space-y-3 pb-2">
                     {verifiedTrendingPlaces.map((place, index) => {
                       const placeKey = place.placeInfo?.placeId || place.sourceUrl || `${place.name}-${index}`;

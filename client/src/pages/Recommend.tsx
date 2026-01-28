@@ -264,7 +264,7 @@ function BottomNav() {
           </button>
         </Link>
         <Link href="/add">
-          <button className="flex flex-col items-center justify-center w-14 h-14 -mt-4 rounded-full bg-primary text-primary-foreground shadow-lg">
+          <button className="flex flex-col items-center justify-center w-14 h-14 -mt-6 rounded-full bg-primary text-primary-foreground shadow-lg">
             <Plus className="w-6 h-6" />
           </button>
         </Link>
