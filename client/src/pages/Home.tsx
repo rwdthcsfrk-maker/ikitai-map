@@ -33,9 +33,6 @@ import {
   IceCream,
   Globe,
   Beer,
-  CheckCircle2,
-  Star,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
@@ -95,25 +92,11 @@ export default function Home() {
   const { data: places, isLoading: placesLoading } = trpc.place.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
-  const savedPlaceIds = new Set(
-    (places || [])
-      .map((place) => place.googlePlaceId)
-      .filter((placeId): placeId is string => Boolean(placeId))
-  );
 
   const parseSearchMutation = trpc.ai.parseSearchQuery.useMutation();
   const updateStatusMutation = trpc.place.updateStatus.useMutation({
     onSuccess: () => {
       utils.place.list.invalidate();
-    },
-  });
-  const createPlaceMutation = trpc.place.create.useMutation({
-    onSuccess: () => {
-      utils.place.list.invalidate();
-      toast.success("行きたいに追加しました");
-    },
-    onError: () => {
-      toast.error("追加に失敗しました");
     },
   });
 
@@ -754,10 +737,10 @@ export default function Home() {
               <span className="text-xs font-medium">ホーム</span>
             </button>
           </Link>
-          <Link href="/recommend">
+          <Link href="/search">
             <button className="flex flex-col items-center gap-1 px-3 py-2 text-muted-foreground">
-              <Sparkles className="w-5 h-5" />
-              <span className="text-xs">おすすめ</span>
+              <Search className="w-5 h-5" />
+              <span className="text-xs">検索</span>
             </button>
           </Link>
           <Link href="/add">

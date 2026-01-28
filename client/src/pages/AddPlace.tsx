@@ -158,6 +158,7 @@ export default function AddPlace() {
   const [detailTargetIndex, setDetailTargetIndex] = useState<number | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [currentTrendingIndex, setCurrentTrendingIndex] = useState(0);
+  const [savingRecommendedId, setSavingRecommendedId] = useState<string | null>(null);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
   const trendingCardRefs = useRef<Array<HTMLDivElement | null>>([]);
@@ -172,6 +173,15 @@ export default function AddPlace() {
   const { data: savedPlaces } = trpc.place.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  const { data: recommendedPlaces, isLoading: recommendedLoading } = trpc.place.recommended.useQuery(
+    {
+      location: currentLocation ?? undefined,
+      limit: 6,
+    },
+    {
+      enabled: isAuthenticated,
+    }
+  );
   // SNSで話題のお店を取得
   const { data: trendingData, isLoading: trendingLoading } = trpc.advancedSearch.trending.useQuery(
     {
@@ -425,6 +435,37 @@ export default function AddPlace() {
     }
   };
 
+  const handleSaveRecommended = (place: {
+    placeId: string;
+    name: string;
+    address: string;
+    rating?: number;
+    userRatingsTotal?: number;
+    latitude: number;
+    longitude: number;
+    googleMapsUrl: string;
+    reason?: string;
+  }) => {
+    if (savedPlaceIds.has(place.placeId)) {
+      toast.success("すでに追加済みです");
+      return;
+    }
+    setSavingRecommendedId(place.placeId);
+    handleCreatePlace({
+      googlePlaceId: place.placeId,
+      name: place.name,
+      address: place.address,
+      latitude: place.latitude,
+      longitude: place.longitude,
+      rating: place.rating,
+      summary: place.reason,
+      source: "Google",
+      googleMapsUrl: place.googleMapsUrl,
+    }, {
+      onSuccess: () => setSavingRecommendedId(null),
+    }).catch(() => setSavingRecommendedId(null));
+  };
+
   const handleSave = async () => {
     if (!selectedPlace) return;
 
@@ -536,251 +577,320 @@ export default function AddPlace() {
         </div>
       </header>
 
-      {/* Map */}
-      <div className="flex-1 relative">
-        <MapView
-          onMapReady={handleMapReady}
-          className="w-full h-full"
-          initialCenter={{ lat: 35.6812, lng: 139.7671 }}
-          initialZoom={12}
-        />
+      {/* Map + Sections */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="relative h-[42vh]">
+          <MapView
+            onMapReady={handleMapReady}
+            className="w-full h-full"
+            initialCenter={{ lat: 35.6812, lng: 139.7671 }}
+            initialZoom={12}
+          />
 
-        {/* SNSで話題のお店 - 縮小版 */}
-        {!selectedPlace && (
-          <div className="absolute top-3 left-3 right-3 z-10">
-            <Card className="border-0 shadow-lg bg-gradient-to-r from-pink-50 to-red-50/80 dark:from-pink-950/40 dark:to-red-950/30">
-              <CardContent className="p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="h-9 w-9 rounded-full bg-gradient-to-r from-pink-500 to-red-500 text-white flex items-center justify-center shadow-sm">
-                      <span className="text-base">🔥</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">話題のお店</p>
-                      <p className="text-xs text-muted-foreground">
-                        SNSで今話題のグルメスポット
-                      </p>
-                    </div>
-                  </div>
-                  {trendingLoading && (
-                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-                {/* エリア選択ボタン */}
-                <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide">
-                  {areas.map((area) => (
-                    <Button
-                      key={area.id}
-                      variant={selectedArea === area.id ? 'default' : 'outline'}
-                      size="sm"
-                      className="h-7 px-3 text-xs shrink-0 rounded-full"
-                      onClick={() => setSelectedArea(area.id)}
-                    >
-                      {area.label}
-                    </Button>
-                  ))}
-                </div>
-                <div className="max-h-[30vh] overflow-y-auto snap-y snap-mandatory pr-1">
-                  <div className="space-y-3 pb-2">
-                    {verifiedTrendingPlaces.map((place, index) => {
-                      const placeKey = place.placeInfo?.placeId || place.sourceUrl || `${place.name}-${index}`;
-                      return (
-                        <div
-                          key={placeKey}
-                          ref={(element) => {
-                            trendingCardRefs.current[index] = element;
-                          }}
+          {/* Search Results Button */}
+          {searchResults.length > 0 && !isResultsOpen && (
+            <Button
+              variant="secondary"
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 shadow-lg bg-card h-11 px-4 gap-2"
+              onClick={() => setIsResultsOpen(true)}
+            >
+              <ChevronUp className="w-4 h-4" />
+              検索結果 ({searchResults.length}件)
+            </Button>
+          )}
+
+          {/* Selected Place Card */}
+          {selectedPlace && (
+            <div className="absolute bottom-4 left-3 right-3">
+              <Card className="shadow-lg">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    {selectedPlace.photoUrl ? (
+                      <img
+                        src={selectedPlace.photoUrl}
+                        alt={selectedPlace.name}
+                        className="w-16 h-16 object-cover rounded-lg shrink-0"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center shrink-0">
+                        <MapPin className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start">
+                        <h3 className="font-semibold text-base truncate pr-2">
+                          {selectedPlace.name}
+                        </h3>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 h-8 w-8 -mr-2 -mt-1"
+                          onClick={() => setSelectedPlace(null)}
                         >
-                          <Card
-                            className="w-full border bg-background/90 cursor-pointer active:scale-[0.98] transition-transform overflow-hidden snap-start"
-                            onClick={() => handleOpenDetails(place, index)}
-                          >
-                            {place.placeInfo?.placeId && savedPlaceIds.has(place.placeInfo.placeId) && (
-                              <div className="absolute top-2 right-2 z-10 rounded-full bg-emerald-500 text-white p-1 shadow-sm">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                              </div>
-                            )}
-                            {/* サムネイル表示 */}
-                            {place.thumbnailUrl && (
-                              <a
-                                className="relative block w-full h-36 bg-muted"
-                                href={place.sourceUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label="話題のお店の動画を開く"
-                                onClick={(event) => event.stopPropagation()}
-                              >
-                                <img
-                                  src={place.thumbnailUrl}
-                                  alt={place.name}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display = 'none';
-                                  }}
-                                />
-                                <div className={`absolute top-2 left-2 px-2 py-0.5 rounded text-[11px] font-medium text-white ${
-                                  place.source === 'TikTok' ? 'bg-pink-500' : place.source === 'Instagram' ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-red-500'
-                                }`}>
-                                  {place.source}
-                                </div>
-                                <div className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white flex items-center gap-1">
-                                  <ExternalLink className="w-3 h-3" />
-                                  動画
-                                </div>
-                              </a>
-                            )}
-                            <CardContent className="p-3">
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold line-clamp-2 leading-tight mb-1">
-                                  {place.extractedStoreName || place.name}
-                                </p>
-                            {place.placeInfo && (
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <MapPin className="w-3.5 h-3.5" />
-                                <span className="truncate">{place.placeInfo.address?.split(' ')[0]}</span>
-                                {place.placeInfo.rating && (
-                                  <span className="flex items-center ml-1">
-                                    <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                                    {place.placeInfo.rating}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {pickSummaryTags(place).map((tag) => (
-                              <span
-                                key={`${place.name}-${tag}`}
-                                className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 mt-3">
-                                <Button
-                                  size="sm"
-                                  className="h-8 text-xs"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleAddSNSTrendingPlace(place, index);
-                                  }}
-                                  disabled={
-                                    createPlaceMutation.isPending ||
-                                    (place.placeInfo?.placeId
-                                      ? savedPlaceIds.has(place.placeInfo.placeId)
-                                      : false)
-                                  }
-                                >
-                                  {createPlaceMutation.isPending ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : place.placeInfo?.placeId &&
-                                    savedPlaceIds.has(place.placeInfo.placeId) ? (
-                                    <>
-                                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                                      追加済み
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Plus className="w-3 h-3 mr-1" />
-                                      追加
-                                    </>
-                                  )}
-                                </Button>
-                                <Button asChild size="sm" variant="outline" className="h-8 text-xs">
-                                  <a
-                                    href={place.sourceUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(event) => event.stopPropagation()}
-                                  >
-                                    <ExternalLink className="w-3 h-3 mr-1" />
-                                    動画
-                                  </a>
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </div>
-                      );
-                    })}
-                    {!trendingLoading && verifiedTrendingPlaces.length === 0 && (
-                      <div className="text-xs text-muted-foreground px-2 py-3">
-                        話題のお店が見つかりませんでした
+                          <X className="w-4 h-4" />
+                        </Button>
                       </div>
-                    )}
+                      <p className="text-sm text-muted-foreground truncate">
+                        {selectedPlace.address}
+                      </p>
+                      {selectedPlace.rating && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                          <span className="text-sm font-medium">{selectedPlace.rating}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full mt-3 h-11"
+                    onClick={() => setIsSaveDrawerOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    この店舗を保存
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+          {/* あなたへのおすすめ */}
+          <Card className="border-0 shadow-lg bg-background/95">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="text-sm font-semibold">あなたへのおすすめ</p>
+                  <p className="text-xs text-muted-foreground">保存傾向からピックアップ</p>
+                </div>
+                {recommendedLoading && (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {(recommendedPlaces || []).map((place) => (
+                  <Card key={place.placeId} className="w-56 shrink-0 border bg-background/90">
+                    <CardContent className="p-3 space-y-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{place.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {place.address?.split(" ")[0]}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          根拠: {place.reason}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        {place.rating && (
+                          <span className="flex items-center gap-1 text-foreground">
+                            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                            {place.rating}
+                          </span>
+                        )}
+                        {place.userRatingsTotal && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {place.userRatingsTotal}件
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        className="w-full h-8 text-xs"
+                        onClick={() => handleSaveRecommended(place)}
+                        disabled={
+                          createPlaceMutation.isPending ||
+                          savingRecommendedId === place.placeId ||
+                          savedPlaceIds.has(place.placeId)
+                        }
+                      >
+                        {savedPlaceIds.has(place.placeId) ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                            追加済み
+                          </>
+                        ) : savingRecommendedId === place.placeId ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <>
+                            <Plus className="w-3 h-3 mr-1" />
+                            保存する
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* SNSで話題のお店 */}
+          <Card className="border-0 shadow-lg bg-gradient-to-r from-pink-50 to-red-50/80 dark:from-pink-950/40 dark:to-red-950/30">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-9 w-9 rounded-full bg-gradient-to-r from-pink-500 to-red-500 text-white flex items-center justify-center shadow-sm">
+                    <span className="text-base">🔥</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">話題のお店</p>
+                    <p className="text-xs text-muted-foreground">
+                      SNSで今話題のグルメスポット
+                    </p>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Search Results Button */}
-        {searchResults.length > 0 && !isResultsOpen && (
-          <Button
-            variant="secondary"
-            className="absolute bottom-24 left-1/2 -translate-x-1/2 shadow-lg bg-card h-11 px-4 gap-2"
-            onClick={() => setIsResultsOpen(true)}
-          >
-            <ChevronUp className="w-4 h-4" />
-            検索結果 ({searchResults.length}件)
-          </Button>
-        )}
-
-        {/* Selected Place Card */}
-        {selectedPlace && (
-          <div className="absolute bottom-24 left-3 right-3">
-            <Card className="shadow-lg">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  {selectedPlace.photoUrl ? (
-                    <img
-                      src={selectedPlace.photoUrl}
-                      alt={selectedPlace.name}
-                      className="w-16 h-16 object-cover rounded-lg shrink-0"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center shrink-0">
-                      <MapPin className="w-6 h-6 text-muted-foreground" />
+                {trendingLoading && (
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              {/* エリア選択ボタン */}
+              <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hide">
+                {areas.map((area) => (
+                  <Button
+                    key={area.id}
+                    variant={selectedArea === area.id ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 px-3 text-xs shrink-0 rounded-full"
+                    onClick={() => setSelectedArea(area.id)}
+                  >
+                    {area.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto snap-y snap-mandatory pr-1">
+                <div className="space-y-3 pb-2">
+                  {verifiedTrendingPlaces.map((place, index) => {
+                    const placeKey = place.placeInfo?.placeId || place.sourceUrl || `${place.name}-${index}`;
+                    return (
+                      <div
+                        key={placeKey}
+                        ref={(element) => {
+                          trendingCardRefs.current[index] = element;
+                        }}
+                      >
+                        <Card
+                          className="w-full border bg-background/90 cursor-pointer active:scale-[0.98] transition-transform overflow-hidden snap-start"
+                          onClick={() => handleOpenDetails(place, index)}
+                        >
+                          {place.placeInfo?.placeId && savedPlaceIds.has(place.placeInfo.placeId) && (
+                            <div className="absolute top-2 right-2 z-10 rounded-full bg-emerald-500 text-white p-1 shadow-sm">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </div>
+                          )}
+                          {/* サムネイル表示 */}
+                          {place.thumbnailUrl && (
+                            <a
+                              className="relative block w-full h-36 bg-muted"
+                              href={place.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="話題のお店の動画を開く"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <img
+                                src={place.thumbnailUrl}
+                                alt={place.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                              <div className={`absolute top-2 left-2 px-2 py-0.5 rounded text-[11px] font-medium text-white ${
+                                place.source === 'TikTok' ? 'bg-pink-500' : place.source === 'Instagram' ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-red-500'
+                              }`}>
+                                {place.source}
+                              </div>
+                              <div className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white flex items-center gap-1">
+                                <ExternalLink className="w-3 h-3" />
+                                動画
+                              </div>
+                            </a>
+                          )}
+                          <CardContent className="p-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold line-clamp-2 leading-tight mb-1">
+                                {place.extractedStoreName || place.name}
+                              </p>
+                              {place.placeInfo && (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <MapPin className="w-3.5 h-3.5" />
+                                  <span className="truncate">{place.placeInfo.address?.split(' ')[0]}</span>
+                                  {place.placeInfo.rating && (
+                                    <span className="flex items-center ml-1">
+                                      <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                      {place.placeInfo.rating}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {pickSummaryTags(place).map((tag) => (
+                                <span
+                                  key={`${place.name}-${tag}`}
+                                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 mt-3">
+                              <Button
+                                size="sm"
+                                className="h-8 text-xs"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleAddSNSTrendingPlace(place, index);
+                                }}
+                                disabled={
+                                  createPlaceMutation.isPending ||
+                                  (place.placeInfo?.placeId
+                                    ? savedPlaceIds.has(place.placeInfo.placeId)
+                                    : false)
+                                }
+                              >
+                                {createPlaceMutation.isPending ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : place.placeInfo?.placeId &&
+                                  savedPlaceIds.has(place.placeInfo.placeId) ? (
+                                  <>
+                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                    追加済み
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="w-3 h-3 mr-1" />
+                                    追加
+                                  </>
+                                )}
+                              </Button>
+                              <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                                <a
+                                  href={place.sourceUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <ExternalLink className="w-3 h-3 mr-1" />
+                                  動画
+                                </a>
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    );
+                  })}
+                  {!trendingLoading && verifiedTrendingPlaces.length === 0 && (
+                    <div className="text-xs text-muted-foreground px-2 py-3">
+                      話題のお店が見つかりませんでした
                     </div>
                   )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start">
-                      <h3 className="font-semibold text-base truncate pr-2">
-                        {selectedPlace.name}
-                      </h3>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 h-8 w-8 -mr-2 -mt-1"
-                        onClick={() => setSelectedPlace(null)}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {selectedPlace.address}
-                    </p>
-                    {selectedPlace.rating && (
-                      <div className="flex items-center gap-1 mt-1">
-                        <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                        <span className="text-sm font-medium">{selectedPlace.rating}</span>
-                      </div>
-                    )}
-                  </div>
                 </div>
-                <Button
-                  className="w-full mt-3 h-11"
-                  onClick={() => setIsSaveDrawerOpen(true)}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  この店舗を保存
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Search Results Drawer */}
