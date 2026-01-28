@@ -134,6 +134,29 @@ export default function Search() {
     return withDistance;
   }, [searchResults, sortByDistance, currentLocation]);
 
+  const travelTargets = useMemo(() => {
+    if (!sortedSearchResults) return [];
+    return sortedSearchResults
+      .map((place) => {
+        const lat = place.latitude ? parseFloat(place.latitude) : null;
+        const lng = place.longitude ? parseFloat(place.longitude) : null;
+        if (lat === null || lng === null) return null;
+        return { id: place.id, lat, lng };
+      })
+      .filter((place): place is { id: number; lat: number; lng: number } => Boolean(place))
+      .slice(0, 10);
+  }, [sortedSearchResults]);
+
+  const { data: travelTimes } = trpc.place.travelTimes.useQuery(
+    {
+      origin: currentLocation ?? { lat: 0, lng: 0 },
+      destinations: travelTargets,
+    },
+    {
+      enabled: Boolean(currentLocation && travelTargets.length > 0),
+    }
+  );
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
       toast.error("検索キーワードを入力してください");
@@ -359,6 +382,27 @@ export default function Search() {
               const distance = currentLocation && lat !== null && lng !== null
                 ? getDistanceKm(currentLocation, { lat, lng })
                 : null;
+              const travelInfo = travelTimes?.[place.id];
+              const matrixDistanceKm = travelInfo?.distanceMeters
+                ? travelInfo.distanceMeters / 1000
+                : null;
+              const distanceLabel = matrixDistanceKm !== null
+                ? formatDistance(matrixDistanceKm)
+                : distance !== null
+                  ? formatDistance(distance)
+                  : null;
+              const travelLabel = travelInfo?.walkingDurationText || travelInfo?.drivingDurationText
+                ? [
+                    travelInfo?.walkingDurationText
+                      ? `徒歩${travelInfo.walkingDurationText}`
+                      : null,
+                    travelInfo?.drivingDurationText
+                      ? `車${travelInfo.drivingDurationText}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" / ")
+                : null;
               return (
                 <Card key={place.id} className="active:scale-[0.98] transition-transform">
                   <CardContent className="p-4">
@@ -385,9 +429,14 @@ export default function Search() {
                               {place.userRating}
                             </span>
                           )}
-                          {distance !== null && (
+                          {distanceLabel && (
                             <span className="text-xs text-muted-foreground">
-                              現在地から{formatDistance(distance)}
+                              現在地から{distanceLabel}
+                            </span>
+                          )}
+                          {travelLabel && (
+                            <span className="text-xs text-muted-foreground">
+                              {travelLabel}
                             </span>
                           )}
                         </div>

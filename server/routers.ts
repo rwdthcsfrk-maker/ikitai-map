@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { invokeLLM } from "./_core/llm";
-import { makeRequest, PlacesSearchResult, PlaceDetailsResult } from "./_core/map";
+import { makeRequest, PlacesSearchResult, PlaceDetailsResult, DistanceMatrixResult } from "./_core/map";
 import * as db from "./db";
 import { PARENT_GENRES, CHILD_GENRES, BUDGET_BANDS, DISTANCE_OPTIONS, FEATURE_OPTIONS, SORT_OPTIONS, PREFECTURES } from "@shared/masters";
 
@@ -120,6 +120,69 @@ const placeRouter = router({
           if (results.length >= limit) break;
         }
       }
+
+      return results;
+    }),
+
+  travelTimes: protectedProcedure
+    .input(z.object({
+      origin: z.object({
+        lat: z.number(),
+        lng: z.number(),
+      }),
+      destinations: z.array(z.object({
+        id: z.number(),
+        lat: z.number(),
+        lng: z.number(),
+      })).min(1).max(25),
+    }))
+    .query(async ({ input }) => {
+      const origin = `${input.origin.lat},${input.origin.lng}`;
+      const destinations = input.destinations
+        .map((destination) => `${destination.lat},${destination.lng}`)
+        .join("|");
+
+      const [walking, driving] = await Promise.all([
+        makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
+          origins: origin,
+          destinations,
+          mode: "walking",
+          language: "ja",
+          region: "jp",
+        }),
+        makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
+          origins: origin,
+          destinations,
+          mode: "driving",
+          language: "ja",
+          region: "jp",
+        }),
+      ]);
+
+      const walkingElements = walking?.rows?.[0]?.elements ?? [];
+      const drivingElements = driving?.rows?.[0]?.elements ?? [];
+
+      const results: Record<number, {
+        walkingDurationText?: string;
+        drivingDurationText?: string;
+        distanceMeters?: number;
+      }> = {};
+
+      input.destinations.forEach((destination, index) => {
+        const walkingElement = walkingElements[index];
+        const drivingElement = drivingElements[index];
+        const distanceMeters = walkingElement?.distance?.value ?? drivingElement?.distance?.value;
+
+        results[destination.id] = {
+          walkingDurationText: walkingElement?.status === "OK"
+            ? walkingElement.duration?.text
+            : undefined,
+          drivingDurationText: drivingElement?.status === "OK"
+            ? drivingElement.duration?.text
+            : undefined,
+          distanceMeters,
+        };
+      });
 
       return results;
     }),

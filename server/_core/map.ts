@@ -179,6 +179,18 @@ export type PlacesSearchResult = {
   status: string;
 };
 
+export type DistanceMatrixResult = {
+  rows: Array<{
+    elements: Array<{
+      status: string;
+      distance?: { text: string; value: number };
+      duration?: { text: string; value: number };
+      duration_in_traffic?: { text: string; value: number };
+    }>;
+  }>;
+  status: string;
+};
+
 export type PlaceDetailsResult = {
   result: {
     place_id: string;
@@ -319,5 +331,4 @@ export type RoadsResult = {
  * Output: Image URL (not JSON) - use directly in <img src={url} />
  * Note: Construct URL manually with getMapsConfig() for auth
  */
-
 
