@@ -579,7 +579,7 @@ export default function AddPlace() {
 
       {/* Map + Sections */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="relative h-[42vh]">
+        <div className="relative h-[42vh] shrink-0">
           <MapView
             onMapReady={handleMapReady}
             className="w-full h-full"
@@ -654,7 +654,7 @@ export default function AddPlace() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 bg-background border-t">
           {/* あなたへのおすすめ */}
           <Card className="border-0 shadow-lg bg-background/95">
             <CardContent className="p-3">
