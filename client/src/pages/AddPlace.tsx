@@ -106,6 +106,7 @@ export default function AddPlace() {
   const [sceneInput, setSceneInput] = useState("");
   const [sceneQuery, setSceneQuery] = useState("");
   const sheetTouchStartY = useRef<number | null>(null);
+  const recommendMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const sceneDebounceRef = useRef<number | null>(null);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
@@ -149,6 +150,41 @@ export default function AddPlace() {
       .map((place) => place.googlePlaceId)
       .filter((placeId): placeId is string => Boolean(placeId))
   );
+
+  useEffect(() => {
+    if (!map) return;
+    recommendMarkersRef.current.forEach((marker) => {
+      marker.map = null;
+    });
+    recommendMarkersRef.current = [];
+
+    if (!recommendedPlaces || recommendedPlaces.length === 0) return;
+    recommendedPlaces.forEach((place) => {
+      const pin = document.createElement("div");
+      pin.innerHTML = `
+        <div style="
+          background: #ef4444;
+          color: white;
+          width: 32px;
+          height: 32px;
+          border-radius: 999px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+          border: 2px solid white;
+        ">★</div>
+      `;
+      const marker = new google.maps.marker.AdvancedMarkerElement({
+        map,
+        position: { lat: place.latitude, lng: place.longitude },
+        content: pin,
+        title: place.name,
+      });
+      recommendMarkersRef.current.push(marker);
+    });
+  }, [map, recommendedPlaces]);
 
   const createPlaceMutation = trpc.place.create.useMutation();
 
@@ -523,16 +559,7 @@ export default function AddPlace() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 bg-background border-t pb-24">
-          <Card className="border-0 shadow-sm bg-muted/40">
-            <CardContent className="p-4">
-              <p className="text-sm font-semibold">あなたへのおすすめ</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                画面下のパネルを上にスワイプしておすすめを確認できます
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 bg-background border-t pb-24" />
       </div>
 
       {/* Search Results Drawer */}
