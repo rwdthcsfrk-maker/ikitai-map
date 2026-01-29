@@ -132,6 +132,10 @@ export default function Home() {
         },
         () => {
           // 位置情報取得失敗時はデフォルトの東京駅を表示
+          const fallback = { lat: 35.6812, lng: 139.7671 };
+          setCurrentLocation(fallback);
+          mapInstance.panTo(fallback);
+          mapInstance.setZoom(14);
         },
         {
           enableHighAccuracy: false,
@@ -139,6 +143,11 @@ export default function Home() {
           maximumAge: 60000,
         }
       );
+    } else {
+      const fallback = { lat: 35.6812, lng: 139.7671 };
+      setCurrentLocation(fallback);
+      mapInstance.panTo(fallback);
+      mapInstance.setZoom(14);
     }
   }, []);
 
@@ -193,6 +202,12 @@ export default function Home() {
       },
       (error) => {
         setIsLocating(false);
+        const fallback = { lat: 35.6812, lng: 139.7671 };
+        setCurrentLocation(fallback);
+        if (map) {
+          map.panTo(fallback);
+          map.setZoom(14);
+        }
         if (showToast) {
           switch (error.code) {
             case error.PERMISSION_DENIED:

@@ -14,7 +14,7 @@ export default function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-background border-t z-50 safe-area-bottom">
-      <div className="flex items-center justify-around h-16">
+      <div className="mx-auto flex items-center justify-between h-16 max-w-md px-6">
         {NAV_ITEMS.map((item) => {
           const isActive = item.href === "/"
             ? location === "/"
