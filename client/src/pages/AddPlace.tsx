@@ -18,6 +18,7 @@ import {
   Star,
   Plus,
   List,
+  ExternalLink,
   ChevronUp,
   X,
   CheckCircle2,
@@ -781,88 +782,111 @@ function RecommendedPlaceCard({
   const photoUrl = buildPhotoUrl(details?.photos?.[0]?.photo_reference);
 
   return (
-    <Card className={`${variant === "stack" ? "w-full" : "w-60"} shrink-0 border bg-background/90`}>
-      <CardContent className="p-3 space-y-2">
-        {photoUrl && (
-          <div className="w-full h-32 rounded-lg overflow-hidden bg-muted">
-            <img
-              src={photoUrl}
-              alt={place.name}
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
+    <Card className={`${variant === "stack" ? "w-full" : "w-60"} shrink-0 border bg-background/95 shadow-sm`}>
+      <CardContent className="p-3 space-y-3">
+        <div className="flex gap-3">
+          <div className="w-24 h-24 rounded-xl overflow-hidden bg-muted shrink-0">
+            {photoUrl ? (
+              <img
+                src={photoUrl}
+                alt={place.name}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                No Image
+              </div>
+            )}
           </div>
-        )}
-        <div className="min-w-0">
-          <p className="text-sm font-semibold truncate">{place.name}</p>
-          <p className="text-xs text-muted-foreground truncate">
-            {place.address?.split(" ")[0]}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {place.rating && (
-            <span className="flex items-center gap-1 text-foreground">
-              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-              {place.rating}
-            </span>
-          )}
-          {place.userRatingsTotal && (
-            <span className="text-[10px] text-muted-foreground">
-              {place.userRatingsTotal}件
-            </span>
-          )}
-          <span className="ml-auto text-[10px] text-primary font-medium">
-            マッチ度 {matchScore}%
-          </span>
-        </div>
-        <div className="rounded-lg bg-muted/40 p-2 text-[10px] text-muted-foreground space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <span>理由</span>
-            <span className="truncate">{place.reason}</span>
-          </div>
-          {sceneTokens.length > 0 && (
-            <div className="flex items-center justify-between gap-2">
-              <span>シーン</span>
-              <span className="truncate">{sceneTokens.join(" / ")}</span>
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold truncate">{place.name}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {place.address?.split(" ")[0]}
+                </p>
+              </div>
+              <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-1 rounded-full">
+                マッチ {matchScore}%
+              </span>
             </div>
-          )}
-          <div className="flex items-center justify-between gap-2">
-            <span>営業時間</span>
-            <span>{openingLabel}</span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span>価格帯</span>
-            <span>{priceLabel}</span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span>距離</span>
-            <span>{distanceLabel}</span>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {place.rating && (
+                <span className="flex items-center gap-1 text-foreground">
+                  <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                  {place.rating}
+                </span>
+              )}
+              {place.userRatingsTotal && (
+                <span className="text-[10px] text-muted-foreground">
+                  {place.userRatingsTotal}件
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {sceneTokens.slice(0, 2).map((token) => (
+                <span
+                  key={token}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground"
+                >
+                  {token}
+                </span>
+              ))}
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                {place.reason}
+              </span>
+            </div>
           </div>
         </div>
-        <Button
-          size="sm"
-          className="w-full h-8 text-xs"
-          onClick={() => onSave(place)}
-          disabled={
-            isSaving ||
-            savingRecommendedId === place.placeId ||
-            savedPlaceIds.has(place.placeId)
-          }
-        >
-          {savedPlaceIds.has(place.placeId) ? (
-            <>
-              <CheckCircle2 className="w-3 h-3 mr-1" />
-              追加済み
-            </>
-          ) : savingRecommendedId === place.placeId ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
-          ) : (
-            <>
-              <Plus className="w-3 h-3 mr-1" />
-              保存する
-            </>
-          )}
-        </Button>
+
+        <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
+          <div className="rounded-lg bg-muted/40 px-2 py-1">
+            <span className="block text-[9px]">距離</span>
+            <span className="text-foreground">{distanceLabel}</span>
+          </div>
+          <div className="rounded-lg bg-muted/40 px-2 py-1">
+            <span className="block text-[9px]">営業時間</span>
+            <span className="text-foreground">{openingLabel}</span>
+          </div>
+          <div className="rounded-lg bg-muted/40 px-2 py-1">
+            <span className="block text-[9px]">価格帯</span>
+            <span className="text-foreground">{priceLabel}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            size="sm"
+            className="h-9 text-xs"
+            onClick={() => onSave(place)}
+            disabled={
+              isSaving ||
+              savingRecommendedId === place.placeId ||
+              savedPlaceIds.has(place.placeId)
+            }
+          >
+            {savedPlaceIds.has(place.placeId) ? (
+              <>
+                <CheckCircle2 className="w-3 h-3 mr-1" />
+                追加済み
+              </>
+            ) : savingRecommendedId === place.placeId ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <>
+                <Plus className="w-3 h-3 mr-1" />
+                保存する
+              </>
+            )}
+          </Button>
+          <Button asChild size="sm" variant="outline" className="h-9 text-xs">
+            <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="w-3 h-3 mr-1" />
+              Google店舗
+            </a>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -938,7 +962,7 @@ function RecommendedSheet({
       }}
     >
       <div
-        className="mx-auto w-full max-w-lg rounded-t-3xl bg-background/95 backdrop-blur border-t shadow-[0_-12px_40px_rgba(0,0,0,0.1)]"
+        className="mx-auto w-full max-w-lg rounded-t-[28px] bg-background/95 backdrop-blur border-t shadow-[0_-18px_50px_rgba(15,23,42,0.18)]"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
@@ -950,11 +974,11 @@ function RecommendedSheet({
           <span className="h-1.5 w-12 rounded-full bg-muted-foreground/30" />
         </button>
         <div className="px-4 pb-4">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-start justify-between mb-3">
             <div>
               <p className="text-sm font-semibold">あなたへのおすすめ</p>
               <p className="text-xs text-muted-foreground">
-                シーンに合わせてマッチ度を表示
+                シーンに合わせてマッチ度・理由・営業時間を表示
               </p>
             </div>
             {recommendedLoading && (
@@ -985,14 +1009,19 @@ function RecommendedSheet({
             ))}
           </div>
 
-          <Input
-            value={sceneInput}
-            onChange={(event) => onSceneChange(event.target.value)}
-            placeholder="2名・シーン（例: デート / 家族ご飯）"
-            className="h-11 mt-2"
-          />
+          <div className="mt-2 rounded-2xl border bg-card px-3 py-2 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">シーン</span>
+              <Input
+                value={sceneInput}
+                onChange={(event) => onSceneChange(event.target.value)}
+                placeholder="2名・シーン（例: デート / 家族ご飯）"
+                className="h-9 border-0 bg-transparent px-0 text-sm focus-visible:ring-0"
+              />
+            </div>
+          </div>
 
-          <div className="mt-4 space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+          <div className="mt-4 space-y-4 max-h-[52vh] overflow-y-auto pr-1">
             {recommendedPlaces.map((place) => (
               <RecommendedPlaceCard
                 key={place.placeId}
