@@ -49,6 +49,7 @@ const placeRouter = router({
       }).optional(),
       radius: z.number().min(500).max(50000).optional(),
       limit: z.number().min(1).max(20).optional(),
+      scene: z.string().optional(),
     }))
     .query(async ({ ctx, input }) => {
       const savedPlaces = await db.getPlacesByUserId(ctx.user.id);
@@ -65,6 +66,7 @@ const placeRouter = router({
         .slice(0, 3);
 
       const baseQueries = preferredGenres.length > 0 ? preferredGenres : ["グルメ"];
+      const sceneHint = input.scene?.trim();
       const limit = input.limit ?? 6;
       const results: Array<{
         placeId: string;
@@ -76,13 +78,14 @@ const placeRouter = router({
         longitude: number;
         googleMapsUrl: string;
         reason: string;
+        matchScore?: number;
       }> = [];
       const seen = new Set<string>();
 
       for (const genre of baseQueries) {
         if (results.length >= limit) break;
         const params: Record<string, unknown> = {
-          query: `${genre} 人気 おすすめ`,
+          query: `${genre} ${sceneHint ?? ""} 人気 おすすめ`.trim(),
           language: "ja",
           region: "jp",
         };
@@ -106,6 +109,12 @@ const placeRouter = router({
         for (const place of response.results ?? []) {
           if (seen.has(place.place_id)) continue;
           seen.add(place.place_id);
+          const ratingScore = place.rating ? Math.round(place.rating * 6) : 0;
+          const reviewScore = place.user_ratings_total
+            ? Math.min(10, Math.round(Math.log10(place.user_ratings_total + 1) * 8))
+            : 0;
+          const sceneScore = sceneHint ? 8 : 0;
+          const matchScore = Math.min(98, 62 + ratingScore + reviewScore + sceneScore);
           results.push({
             placeId: place.place_id,
             name: place.name,
@@ -115,7 +124,12 @@ const placeRouter = router({
             latitude: place.geometry.location.lat,
             longitude: place.geometry.location.lng,
             googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
-            reason: preferredGenres.length > 0 ? `${genre}が好きそう` : "人気のお店",
+            reason: sceneHint
+              ? `${sceneHint}に合いそう`
+              : preferredGenres.length > 0
+                ? `${genre}が好きそう`
+                : "人気のお店",
+            matchScore,
           });
           if (results.length >= limit) break;
         }

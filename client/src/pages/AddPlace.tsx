@@ -48,6 +48,18 @@ interface PlaceResult {
 
 type LatLng = { lat: number; lng: number };
 
+const FRONTEND_FORGE_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY;
+const FRONTEND_FORGE_BASE =
+  import.meta.env.VITE_FRONTEND_FORGE_API_URL || "https://forge.butterfly-effect.dev";
+const MAPS_PROXY_URL = `${FRONTEND_FORGE_BASE}/v1/maps/proxy`;
+
+const buildPhotoUrl = (photoReference?: string) => {
+  if (!photoReference || !FRONTEND_FORGE_KEY) return undefined;
+  return `${MAPS_PROXY_URL}/maps/api/place/photo?key=${FRONTEND_FORGE_KEY}&maxwidth=800&photoreference=${encodeURIComponent(
+    photoReference
+  )}`;
+};
+
 const EARTH_RADIUS_KM = 6371;
 
 const getDistanceKm = (from: LatLng, to: LatLng) => {
@@ -91,7 +103,9 @@ export default function AddPlace() {
   const [savingRecommendedId, setSavingRecommendedId] = useState<string | null>(null);
   const [isRecommendOpen, setIsRecommendOpen] = useState(false);
   const [sceneInput, setSceneInput] = useState("");
+  const [sceneQuery, setSceneQuery] = useState("");
   const sheetTouchStartY = useRef<number | null>(null);
+  const sceneDebounceRef = useRef<number | null>(null);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
@@ -105,10 +119,25 @@ export default function AddPlace() {
   const { data: savedPlaces } = trpc.place.list.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+  useEffect(() => {
+    if (sceneDebounceRef.current) {
+      window.clearTimeout(sceneDebounceRef.current);
+    }
+    sceneDebounceRef.current = window.setTimeout(() => {
+      setSceneQuery(sceneInput.trim());
+    }, 400);
+    return () => {
+      if (sceneDebounceRef.current) {
+        window.clearTimeout(sceneDebounceRef.current);
+      }
+    };
+  }, [sceneInput]);
+
   const { data: recommendedPlaces, isLoading: recommendedLoading } = trpc.place.recommended.useQuery(
     {
       location: currentLocation ?? undefined,
       limit: 6,
+      scene: sceneQuery || undefined,
     },
     {
       enabled: isAuthenticated,
@@ -697,6 +726,7 @@ function RecommendedPlaceCard({
     longitude: number;
     googleMapsUrl: string;
     reason: string;
+    matchScore?: number;
   };
   currentLocation: LatLng | null;
   savedPlaceIds: Set<string>;
@@ -735,7 +765,7 @@ function RecommendedPlaceCard({
       : "情報なし";
   const priceLabel = detailsLoading ? "取得中" : formatPriceLevel(details?.price_level);
 
-  const matchScore = (() => {
+  const matchScore = place.matchScore ?? (() => {
     const base = 62;
     const ratingBoost = place.rating ? Math.round(place.rating * 6) : 0;
     const reviewBoost = place.userRatingsTotal
@@ -748,10 +778,21 @@ function RecommendedPlaceCard({
       : 0;
     return Math.min(98, base + ratingBoost + reviewBoost + sceneBoost);
   })();
+  const photoUrl = buildPhotoUrl(details?.photos?.[0]?.photo_reference);
 
   return (
     <Card className={`${variant === "stack" ? "w-full" : "w-60"} shrink-0 border bg-background/90`}>
       <CardContent className="p-3 space-y-2">
+        {photoUrl && (
+          <div className="w-full h-32 rounded-lg overflow-hidden bg-muted">
+            <img
+              src={photoUrl}
+              alt={place.name}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          </div>
+        )}
         <div className="min-w-0">
           <p className="text-sm font-semibold truncate">{place.name}</p>
           <p className="text-xs text-muted-foreground truncate">
@@ -858,6 +899,7 @@ function RecommendedSheet({
     longitude: number;
     googleMapsUrl: string;
     reason: string;
+    matchScore?: number;
   }>;
   recommendedLoading: boolean;
   currentLocation: LatLng | null;
