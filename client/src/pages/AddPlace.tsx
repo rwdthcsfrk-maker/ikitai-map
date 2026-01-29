@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { MapView } from "@/components/Map";
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback, useRef, useEffect } from "react";
+import type { TouchEvent as ReactTouchEvent } from "react";
 import { Link, useLocation } from "wouter";
 import {
   ArrowLeft,
@@ -88,6 +89,9 @@ export default function AddPlace() {
   const [isSaveDrawerOpen, setIsSaveDrawerOpen] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<LatLng | null>(null);
   const [savingRecommendedId, setSavingRecommendedId] = useState<string | null>(null);
+  const [isRecommendOpen, setIsRecommendOpen] = useState(false);
+  const [sceneInput, setSceneInput] = useState("");
+  const sheetTouchStartY = useRef<number | null>(null);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
 
@@ -490,34 +494,14 @@ export default function AddPlace() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 bg-background border-t pb-24">
-          {/* あなたへのおすすめ */}
-          <Card className="border-0 shadow-lg bg-background/95">
-            <CardContent className="p-3">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="text-sm font-semibold">あなたへのおすすめ</p>
-                  <p className="text-xs text-muted-foreground">保存傾向からピックアップ</p>
-                </div>
-                {recommendedLoading && (
-                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                )}
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {(recommendedPlaces || []).map((place) => (
-                  <RecommendedPlaceCard
-                    key={place.placeId}
-                    place={place}
-                    currentLocation={currentLocation}
-                    savedPlaceIds={savedPlaceIds}
-                    savingRecommendedId={savingRecommendedId}
-                    isSaving={createPlaceMutation.isPending}
-                    onSave={handleSaveRecommended}
-                  />
-                ))}
-              </div>
+          <Card className="border-0 shadow-sm bg-muted/40">
+            <CardContent className="p-4">
+              <p className="text-sm font-semibold">あなたへのおすすめ</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                画面下のパネルを上にスワイプしておすすめを確認できます
+              </p>
             </CardContent>
           </Card>
-
         </div>
       </div>
 
@@ -663,6 +647,31 @@ export default function AddPlace() {
         </DrawerContent>
       </Drawer>
 
+      <RecommendedSheet
+        isOpen={isRecommendOpen}
+        onToggle={() => setIsRecommendOpen((prev) => !prev)}
+        onTouchStart={(event) => {
+          sheetTouchStartY.current = event.touches[0]?.clientY ?? null;
+        }}
+        onTouchEnd={(event) => {
+          if (sheetTouchStartY.current === null) return;
+          const endY = event.changedTouches[0]?.clientY ?? sheetTouchStartY.current;
+          const delta = sheetTouchStartY.current - endY;
+          if (delta > 40) setIsRecommendOpen(true);
+          if (delta < -40) setIsRecommendOpen(false);
+          sheetTouchStartY.current = null;
+        }}
+        sceneInput={sceneInput}
+        onSceneChange={setSceneInput}
+        recommendedPlaces={recommendedPlaces || []}
+        recommendedLoading={recommendedLoading}
+        currentLocation={currentLocation}
+        savedPlaceIds={savedPlaceIds}
+        savingRecommendedId={savingRecommendedId}
+        isSaving={createPlaceMutation.isPending}
+        onSave={handleSaveRecommended}
+      />
+
       <BottomNav />
     </div>
   );
@@ -675,6 +684,8 @@ function RecommendedPlaceCard({
   savingRecommendedId,
   isSaving,
   onSave,
+  sceneTokens = [],
+  variant = "stack",
 }: {
   place: {
     placeId: string;
@@ -702,6 +713,8 @@ function RecommendedPlaceCard({
     googleMapsUrl: string;
     reason?: string;
   }) => void;
+  sceneTokens?: string[];
+  variant?: "stack" | "inline";
 }) {
   const { data: details, isLoading: detailsLoading } = trpc.place.googleDetails.useQuery(
     { placeId: place.placeId },
@@ -722,8 +735,22 @@ function RecommendedPlaceCard({
       : "情報なし";
   const priceLabel = detailsLoading ? "取得中" : formatPriceLevel(details?.price_level);
 
+  const matchScore = (() => {
+    const base = 62;
+    const ratingBoost = place.rating ? Math.round(place.rating * 6) : 0;
+    const reviewBoost = place.userRatingsTotal
+      ? Math.min(10, Math.round(Math.log10(place.userRatingsTotal + 1) * 8))
+      : 0;
+    const sceneBoost = sceneTokens.some((token) =>
+      [place.name, place.reason].some((text) => text?.includes(token))
+    )
+      ? 8
+      : 0;
+    return Math.min(98, base + ratingBoost + reviewBoost + sceneBoost);
+  })();
+
   return (
-    <Card className="w-60 shrink-0 border bg-background/90">
+    <Card className={`${variant === "stack" ? "w-full" : "w-60"} shrink-0 border bg-background/90`}>
       <CardContent className="p-3 space-y-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold truncate">{place.name}</p>
@@ -743,12 +770,21 @@ function RecommendedPlaceCard({
               {place.userRatingsTotal}件
             </span>
           )}
+          <span className="ml-auto text-[10px] text-primary font-medium">
+            マッチ度 {matchScore}%
+          </span>
         </div>
         <div className="rounded-lg bg-muted/40 p-2 text-[10px] text-muted-foreground space-y-1">
           <div className="flex items-center justify-between gap-2">
             <span>理由</span>
             <span className="truncate">{place.reason}</span>
           </div>
+          {sceneTokens.length > 0 && (
+            <div className="flex items-center justify-between gap-2">
+              <span>シーン</span>
+              <span className="truncate">{sceneTokens.join(" / ")}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-2">
             <span>営業時間</span>
             <span>{openingLabel}</span>
@@ -788,5 +824,149 @@ function RecommendedPlaceCard({
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+function RecommendedSheet({
+  isOpen,
+  onToggle,
+  onTouchStart,
+  onTouchEnd,
+  sceneInput,
+  onSceneChange,
+  recommendedPlaces,
+  recommendedLoading,
+  currentLocation,
+  savedPlaceIds,
+  savingRecommendedId,
+  isSaving,
+  onSave,
+}: {
+  isOpen: boolean;
+  onToggle: () => void;
+  onTouchStart: (event: ReactTouchEvent<HTMLDivElement>) => void;
+  onTouchEnd: (event: ReactTouchEvent<HTMLDivElement>) => void;
+  sceneInput: string;
+  onSceneChange: (value: string) => void;
+  recommendedPlaces: Array<{
+    placeId: string;
+    name: string;
+    address: string;
+    rating?: number;
+    userRatingsTotal?: number;
+    latitude: number;
+    longitude: number;
+    googleMapsUrl: string;
+    reason: string;
+  }>;
+  recommendedLoading: boolean;
+  currentLocation: LatLng | null;
+  savedPlaceIds: Set<string>;
+  savingRecommendedId: string | null;
+  isSaving: boolean;
+  onSave: (place: {
+    placeId: string;
+    name: string;
+    address: string;
+    rating?: number;
+    userRatingsTotal?: number;
+    latitude: number;
+    longitude: number;
+    googleMapsUrl: string;
+    reason?: string;
+  }) => void;
+}) {
+  const sceneTokens = sceneInput.trim().length > 0
+    ? sceneInput.split(/[、,\s]+/).filter(Boolean)
+    : [];
+  const scenePreset = [
+    "デート",
+    "家族ご飯",
+    "友達と",
+    "接待",
+    "一人ごはん",
+  ];
+
+  return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-40"
+      style={{
+        transform: isOpen ? "translateY(0)" : "translateY(62%)",
+        transition: "transform 0.25s ease",
+      }}
+    >
+      <div
+        className="mx-auto w-full max-w-lg rounded-t-3xl bg-background/95 backdrop-blur border-t shadow-[0_-12px_40px_rgba(0,0,0,0.1)]"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        <button
+          className="w-full py-3 flex items-center justify-center gap-2"
+          onClick={onToggle}
+          aria-label="おすすめパネルを開閉"
+        >
+          <span className="h-1.5 w-12 rounded-full bg-muted-foreground/30" />
+        </button>
+        <div className="px-4 pb-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm font-semibold">あなたへのおすすめ</p>
+              <p className="text-xs text-muted-foreground">
+                シーンに合わせてマッチ度を表示
+              </p>
+            </div>
+            {recommendedLoading && (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {scenePreset.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={`px-3 py-1.5 text-xs rounded-full border ${
+                  sceneTokens.includes(preset)
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border text-muted-foreground"
+                }`}
+                onClick={() => {
+                  if (sceneTokens.includes(preset)) {
+                    onSceneChange(sceneTokens.filter((token) => token !== preset).join(" "));
+                  } else {
+                    onSceneChange([...sceneTokens, preset].join(" "));
+                  }
+                }}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+
+          <Input
+            value={sceneInput}
+            onChange={(event) => onSceneChange(event.target.value)}
+            placeholder="2名・シーン（例: デート / 家族ご飯）"
+            className="h-11 mt-2"
+          />
+
+          <div className="mt-4 space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+            {recommendedPlaces.map((place) => (
+              <RecommendedPlaceCard
+                key={place.placeId}
+                place={place}
+                currentLocation={currentLocation}
+                savedPlaceIds={savedPlaceIds}
+                savingRecommendedId={savingRecommendedId}
+                isSaving={isSaving}
+                onSave={onSave}
+                sceneTokens={sceneTokens}
+                variant="stack"
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
