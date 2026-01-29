@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import {
   ArrowLeft,
@@ -91,8 +91,8 @@ export default function Search() {
   const params = useMemo(() => new URLSearchParams(searchParams), [searchParams]);
   const initialQuery = params.get("q") || "";
   const initialFeatures = params.get("features")?.split(",").filter(Boolean) || [];
-  const initialGenre = params.get("genre") || "";
   const initialStatus = (params.get("status") as StatusFilter) || undefined;
+  const lastSyncedRef = useRef<string>("");
 
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [isSearching, setIsSearching] = useState(false);
@@ -145,15 +145,65 @@ export default function Search() {
     );
   }, [currentLocation]);
 
+  const buildSearchParams = (query: string, nextFilters: FilterState) => {
+    const nextParams = new URLSearchParams();
+    if (query.trim()) nextParams.set("q", query.trim());
+    if (nextFilters.features?.length) nextParams.set("features", nextFilters.features.join(","));
+    if (nextFilters.genreParent) nextParams.set("genreParent", nextFilters.genreParent);
+    if (nextFilters.genreChild) nextParams.set("genreChild", nextFilters.genreChild);
+    if (nextFilters.prefecture) nextParams.set("prefecture", nextFilters.prefecture);
+    if (nextFilters.distanceRadius) {
+      nextParams.set("distanceRadius", String(nextFilters.distanceRadius));
+    }
+    if (nextFilters.budgetType) nextParams.set("budgetType", nextFilters.budgetType);
+    if (nextFilters.budgetBand) nextParams.set("budgetBand", nextFilters.budgetBand);
+    if (nextFilters.status) nextParams.set("status", nextFilters.status);
+    if (nextFilters.sort) nextParams.set("sort", nextFilters.sort);
+    return nextParams;
+  };
+
+  const syncUrl = (query: string, nextFilters: FilterState) => {
+    const nextParams = buildSearchParams(query, nextFilters).toString();
+    if (lastSyncedRef.current === nextParams) return;
+    lastSyncedRef.current = nextParams;
+    const suffix = nextParams ? `?${nextParams}` : "";
+    setLocation(`/search${suffix}`);
+  };
+
   useEffect(() => {
-    if (!genresData || !initialGenre || filters.genreParent) return;
+    const nextQuery = params.get("q") || "";
+    const nextFilters: FilterState = {
+      sort: (params.get("sort") as SortOption) || "recommended",
+      features: params.get("features")?.split(",").filter(Boolean) || undefined,
+      genreParent: params.get("genreParent") || undefined,
+      genreChild: params.get("genreChild") || undefined,
+      prefecture: params.get("prefecture") || undefined,
+      distanceRadius: params.get("distanceRadius")
+        ? Number(params.get("distanceRadius"))
+        : undefined,
+      budgetType: (params.get("budgetType") as BudgetType) || undefined,
+      budgetBand: params.get("budgetBand") || undefined,
+      status: (params.get("status") as StatusFilter) || undefined,
+    };
+    const signature = buildSearchParams(nextQuery, nextFilters).toString();
+    if (lastSyncedRef.current === signature) return;
+    lastSyncedRef.current = signature;
+    setSearchQuery(nextQuery);
+    setFilters((prev) => ({ ...prev, ...nextFilters }));
+  }, [params]);
+
+  useEffect(() => {
+    if (!genresData || filters.genreParent) return;
+    const genreFromUrl = params.get("genre");
+    if (!genreFromUrl) return;
     const matchedGenre = genresData.parents.find((genre) =>
-      genre.name.includes(initialGenre)
+      genre.name.includes(genreFromUrl)
     );
     if (matchedGenre) {
       setFilters((prev) => ({ ...prev, genreParent: matchedGenre.id }));
+      syncUrl(searchQuery, { ...filters, genreParent: matchedGenre.id });
     }
-  }, [genresData, initialGenre, filters.genreParent]);
+  }, [genresData, filters.genreParent, params, filters, searchQuery]);
 
   const childGenres = useMemo(() => {
     if (!genresData || !tempFilters.genreParent) return [];
@@ -248,19 +298,11 @@ export default function Search() {
         genreParent: genreId || prev.genreParent,
       }));
 
-      const newParams = new URLSearchParams();
-      newParams.set("q", searchQuery);
-      if (mappedFeatures.length > 0) {
-        newParams.set("features", mappedFeatures.join(","));
-      }
-      if (result.genre) {
-        newParams.set("genre", result.genre);
-      }
-      if (filters.status) {
-        newParams.set("status", filters.status);
-      }
-
-      setLocation(`/search?${newParams.toString()}`);
+      syncUrl(searchQuery, {
+        ...filters,
+        features: mappedFeatures.length > 0 ? mappedFeatures : filters.features,
+        genreParent: genreId || filters.genreParent,
+      });
     } catch (error) {
       toast.error("検索に失敗しました");
     } finally {
@@ -277,10 +319,12 @@ export default function Search() {
     setFilters({ ...tempFilters });
     setPage(1);
     setIsFilterOpen(false);
+    syncUrl(searchQuery, { ...tempFilters });
   };
 
   const clearFilters = () => {
     setTempFilters({ sort: "recommended" });
+    syncUrl(searchQuery, { sort: "recommended" });
   };
 
   const removeFilter = (key: keyof FilterState) => {
@@ -293,6 +337,7 @@ export default function Search() {
       delete nextFilters.budgetBand;
     }
     setFilters(nextFilters);
+    syncUrl(searchQuery, nextFilters);
   };
 
   const toggleFeature = (featureId: string) => {
@@ -461,6 +506,28 @@ export default function Search() {
                 </DrawerHeader>
                 <div className="flex-1 overflow-y-auto px-4">
                   <div className="py-4 space-y-6">
+                    {/* キーワード */}
+                    <div>
+                      <h3 className="font-medium mb-3 text-base">キーワード</h3>
+                      <Input
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        onKeyDown={(event) => event.key === "Enter" && handleSearch()}
+                        placeholder="店名や条件を入力..."
+                        className="h-12"
+                      />
+                      <Button
+                        variant="outline"
+                        className="mt-2 w-full h-10"
+                        onClick={handleSearch}
+                        disabled={isSearching}
+                      >
+                        {isSearching ? "検索中..." : "キーワードで検索"}
+                      </Button>
+                    </div>
+
+                    <Separator />
+
                     {/* エリア・距離 */}
                     <div>
                       <h3 className="font-medium mb-3 text-base">エリア・距離</h3>
