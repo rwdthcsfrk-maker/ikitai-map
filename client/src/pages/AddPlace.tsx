@@ -107,6 +107,7 @@ export default function AddPlace() {
   const [sceneQuery, setSceneQuery] = useState("");
   const sheetTouchStartY = useRef<number | null>(null);
   const recommendMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
+  const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const sceneDebounceRef = useRef<number | null>(null);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
@@ -185,6 +186,36 @@ export default function AddPlace() {
       recommendMarkersRef.current.push(marker);
     });
   }, [map, recommendedPlaces]);
+
+  useEffect(() => {
+    if (!map || !currentLocation) return;
+    const pin = document.createElement("div");
+    pin.innerHTML = `
+      <div style="
+        width: 20px;
+        height: 20px;
+        background: #3b82f6;
+        border: 3px solid white;
+        border-radius: 999px;
+        box-shadow: 0 6px 14px rgba(37, 99, 235, 0.3);
+      "></div>
+    `;
+    if (currentLocationMarkerRef.current) {
+      currentLocationMarkerRef.current.position = {
+        lat: currentLocation.lat,
+        lng: currentLocation.lng,
+      };
+      currentLocationMarkerRef.current.content = pin;
+      currentLocationMarkerRef.current.map = map;
+      return;
+    }
+    currentLocationMarkerRef.current = new google.maps.marker.AdvancedMarkerElement({
+      map,
+      position: { lat: currentLocation.lat, lng: currentLocation.lng },
+      content: pin,
+      title: "現在地",
+    });
+  }, [map, currentLocation]);
 
   const createPlaceMutation = trpc.place.create.useMutation();
 
@@ -484,7 +515,7 @@ export default function AddPlace() {
 
       {/* Map + Sections */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="relative h-[42vh] shrink-0">
+        <div className="relative flex-1">
           <MapView
             onMapReady={handleMapReady}
             className="w-full h-full"
@@ -559,7 +590,6 @@ export default function AddPlace() {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 bg-background border-t pb-24" />
       </div>
 
       {/* Search Results Drawer */}
