@@ -308,6 +308,11 @@ export default function Home() {
       }
     });
 
+    if (currentLocation) {
+      map.panTo({ lat: currentLocation.lat, lng: currentLocation.lng });
+      map.setZoom(14);
+      return;
+    }
     if (filteredPlaces.length > 0 && markersRef.current.length > 0) {
       const bounds = new google.maps.LatLngBounds();
       filteredPlaces.forEach((place) => {
@@ -320,7 +325,7 @@ export default function Home() {
       });
       map.fitBounds(bounds);
     }
-  }, [map, filteredPlaces]);
+  }, [map, filteredPlaces, currentLocation]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
