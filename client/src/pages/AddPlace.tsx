@@ -20,6 +20,7 @@ import {
   List,
   Navigation,
   ChevronUp,
+  ChevronDown,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -109,8 +110,8 @@ export default function AddPlace() {
   const [isRecommendOpen, setIsRecommendOpen] = useState(false);
   const [sceneInput, setSceneInput] = useState("");
   const [sceneQuery, setSceneQuery] = useState("");
-  const [saveMemo, setSaveMemo] = useState("");
   const [saveNote, setSaveNote] = useState("");
+  const [showListPicker, setShowListPicker] = useState(false);
   const shouldLockMap = isRecommendOpen || isResultsOpen || isSaveDrawerOpen;
   const sheetTouchStartY = useRef<number | null>(null);
   const recommendMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
@@ -461,7 +462,7 @@ export default function AddPlace() {
       latitude: place.latitude,
       longitude: place.longitude,
       rating: place.rating,
-      summary: saveMemo ? `${place.reason || ""}\nメモ: ${saveMemo}`.trim() : place.reason,
+      summary: place.reason,
       source: "Google",
       googleMapsUrl: place.googleMapsUrl,
     }, {
@@ -771,41 +772,52 @@ export default function AddPlace() {
 
             {(lists && lists.length > 0) || (sharedLists && sharedLists.length > 0) ? (
               <div className="space-y-3">
-                <Label className="text-sm font-medium">リストに追加（任意）</Label>
-                <div className="space-y-2">
-                  {[...(lists || []), ...(sharedLists || [])].map((list) => (
-                    <div
-                      key={list.id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border ${
-                        list.accessRole === "viewer"
-                          ? "opacity-60 cursor-not-allowed"
-                          : "cursor-pointer active:bg-muted/50"
-                      }`}
-                      onClick={() => {
-                        if (list.accessRole === "viewer") return;
-                        toggleList(list.id);
-                      }}
-                    >
-                      <Checkbox
-                        checked={selectedLists.includes(list.id)}
-                        onCheckedChange={() => toggleList(list.id)}
-                        disabled={list.accessRole === "viewer"}
-                      />
+                <Button
+                  variant="outline"
+                  className="w-full h-11 justify-between"
+                  onClick={() => setShowListPicker((prev) => !prev)}
+                >
+                  リストに追加（任意）
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${showListPicker ? "rotate-180" : ""}`}
+                  />
+                </Button>
+                {showListPicker && (
+                  <div className="space-y-2">
+                    {[...(lists || []), ...(sharedLists || [])].map((list) => (
                       <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center"
-                        style={{ backgroundColor: list.color || "#3b82f6" }}
+                        key={list.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border ${
+                          list.accessRole === "viewer"
+                            ? "opacity-60 cursor-not-allowed"
+                            : "cursor-pointer active:bg-muted/50"
+                        }`}
+                        onClick={() => {
+                          if (list.accessRole === "viewer") return;
+                          toggleList(list.id);
+                        }}
                       >
-                        <List className="w-4 h-4 text-white" />
+                        <Checkbox
+                          checked={selectedLists.includes(list.id)}
+                          onCheckedChange={() => toggleList(list.id)}
+                          disabled={list.accessRole === "viewer"}
+                        />
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center"
+                          style={{ backgroundColor: list.color || "#3b82f6" }}
+                        >
+                          <List className="w-4 h-4 text-white" />
+                        </div>
+                        <span className="text-sm">{list.name}</span>
+                        {list.accessRole && (
+                          <span className="ml-auto text-xs text-muted-foreground">
+                            {list.accessRole === "editor" ? "編集可" : "閲覧"}
+                          </span>
+                        )}
                       </div>
-                      <span className="text-sm">{list.name}</span>
-                      {list.accessRole && (
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {list.accessRole === "editor" ? "編集可" : "閲覧"}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
@@ -852,8 +864,6 @@ export default function AddPlace() {
         }}
         sceneInput={sceneInput}
         onSceneChange={setSceneInput}
-        saveMemo={saveMemo}
-        onSaveMemoChange={setSaveMemo}
         recommendedPlaces={recommendedPlaces || []}
         recommendedLoading={recommendedLoading}
         currentLocation={currentLocation}
@@ -932,19 +942,6 @@ function RecommendedPlaceCard({
   const showOpenNowTag =
     details?.opening_hours?.open_now && distanceKm !== null && distanceKm <= 1.2;
 
-  const matchScore = place.matchScore ?? (() => {
-    const base = 62;
-    const ratingBoost = place.rating ? Math.round(place.rating * 6) : 0;
-    const reviewBoost = place.userRatingsTotal
-      ? Math.min(10, Math.round(Math.log10(place.userRatingsTotal + 1) * 8))
-      : 0;
-    const sceneBoost = sceneTokens.some((token) =>
-      [place.name, place.reason].some((text) => text?.includes(token))
-    )
-      ? 8
-      : 0;
-    return Math.min(98, base + ratingBoost + reviewBoost + sceneBoost);
-  })();
   const photoUrl = buildPhotoUrl(details?.photos?.[0]?.photo_reference);
 
   return (
@@ -956,11 +953,6 @@ function RecommendedPlaceCard({
           photoUrl={photoUrl}
           distanceLabel={distanceLabel}
           openLabel={openingLabel}
-          rightSlot={(
-            <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-1 rounded-full">
-              マッチ {matchScore}%
-            </span>
-          )}
         />
 
         <div className="flex flex-wrap gap-1.5">
@@ -969,17 +961,6 @@ function RecommendedPlaceCard({
               ★ {place.rating}
             </span>
           )}
-          {sceneTokens.slice(0, 2).map((token) => (
-            <span
-              key={token}
-              className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground"
-            >
-              {token}
-            </span>
-          ))}
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-            {place.reason}
-          </span>
           {showOpenNowTag && (
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
               近くで今空いてそう
@@ -989,6 +970,10 @@ function RecommendedPlaceCard({
             価格帯 {priceLabel}
           </span>
         </div>
+
+        {place.reason && (
+          <p className="text-xs text-muted-foreground line-clamp-2">{place.reason}</p>
+        )}
 
         <PlaceActionBar
           onSave={() => onSave(place)}
@@ -1015,8 +1000,6 @@ function RecommendedSheet({
   onTouchEnd,
   sceneInput,
   onSceneChange,
-  saveMemo,
-  onSaveMemoChange,
   recommendedPlaces,
   recommendedLoading,
   currentLocation,
@@ -1032,8 +1015,6 @@ function RecommendedSheet({
   onTouchEnd: (event: ReactTouchEvent<HTMLDivElement>) => void;
   sceneInput: string;
   onSceneChange: (value: string) => void;
-  saveMemo: string;
-  onSaveMemoChange: (value: string) => void;
   recommendedPlaces: Array<{
     placeId: string;
     name: string;
@@ -1067,14 +1048,6 @@ function RecommendedSheet({
   const sceneTokens = sceneInput.trim().length > 0
     ? sceneInput.split(/[、,\s]+/).filter(Boolean)
     : [];
-  const scenePreset = [
-    "デート",
-    "家族ご飯",
-    "友達と",
-    "接待",
-    "一人ごはん",
-  ];
-
   return (
     <div
       className="fixed inset-x-0 bottom-0 z-40"
@@ -1100,35 +1073,12 @@ function RecommendedSheet({
             <div>
               <p className="text-sm font-semibold">あなたへのおすすめ</p>
               <p className="text-xs text-muted-foreground">
-                シーンに合わせてマッチ度・理由・営業時間を表示
+                近くのおすすめをすぐに確認できます
               </p>
             </div>
             {recommendedLoading && (
               <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
             )}
-          </div>
-
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {scenePreset.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                className={`px-3 py-1.5 text-xs rounded-full border ${
-                  sceneTokens.includes(preset)
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background border-border text-muted-foreground"
-                }`}
-                onClick={() => {
-                  if (sceneTokens.includes(preset)) {
-                    onSceneChange(sceneTokens.filter((token) => token !== preset).join(" "));
-                  } else {
-                    onSceneChange([...sceneTokens, preset].join(" "));
-                  }
-                }}
-              >
-                {preset}
-              </button>
-            ))}
           </div>
 
           <div className="mt-2 rounded-2xl border bg-card px-3 py-2 shadow-sm">
@@ -1138,18 +1088,6 @@ function RecommendedSheet({
                 value={sceneInput}
                 onChange={(event) => onSceneChange(event.target.value)}
                 placeholder="2名・シーン（例: デート / 家族ご飯）"
-                className="h-9 border-0 bg-transparent px-0 text-sm focus-visible:ring-0"
-              />
-            </div>
-          </div>
-
-          <div className="mt-2 rounded-2xl border bg-card px-3 py-2 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">メモ</span>
-              <Input
-                value={saveMemo}
-                onChange={(event) => onSaveMemoChange(event.target.value)}
-                placeholder="保存理由を一言（任意）"
                 className="h-9 border-0 bg-transparent px-0 text-sm focus-visible:ring-0"
               />
             </div>

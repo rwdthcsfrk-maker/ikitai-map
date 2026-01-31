@@ -22,18 +22,8 @@ import {
   Heart,
   Check,
   Bookmark,
-  Filter,
   X,
   ChevronUp,
-  ChevronDown,
-  Coffee,
-  Utensils,
-  Wine,
-  Flame,
-  Soup,
-  IceCream,
-  Globe,
-  Beer,
   Star,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -47,29 +37,9 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { PARENT_GENRES, BUDGET_BANDS, DISTANCE_OPTIONS } from "@shared/masters";
 
 type PlaceStatus = "none" | "want_to_go" | "visited";
 
-// ジャンルアイコンマッピング
-const genreIcons: Record<string, React.ReactNode> = {
-  cafe: <Coffee className="w-5 h-5" />,
-  japanese: <Utensils className="w-5 h-5" />,
-  western: <Utensils className="w-5 h-5" />,
-  chinese: <Soup className="w-5 h-5" />,
-  asian: <Globe className="w-5 h-5" />,
-  yakiniku: <Flame className="w-5 h-5" />,
-  izakaya: <Beer className="w-5 h-5" />,
-  ramen: <Soup className="w-5 h-5" />,
-  sweets: <IceCream className="w-5 h-5" />,
-};
 
 export default function Home() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
@@ -82,16 +52,12 @@ export default function Home() {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [isPlaceListOpen, setIsPlaceListOpen] = useState(false);
-  const [showFilters, setShowFilters] = useState(true);
   const [initialPlaceHandled, setInitialPlaceHandled] = useState(false);
   const [recentPlaceIds, setRecentPlaceIds] = useState<number[]>([]);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
 
   // クイックフィルタ状態
-  const [selectedGenre, setSelectedGenre] = useState<string>("");
-  const [selectedDistance, setSelectedDistance] = useState<string>("");
-  const [selectedBudget, setSelectedBudget] = useState<string>("");
 
   const utils = trpc.useUtils();
   const { data: places, isLoading: placesLoading } = trpc.place.list.useQuery(undefined, {
@@ -240,26 +206,7 @@ export default function Home() {
   // 現在地の自動取得はhandleMapReadyで実行するためここでは不要
 
   // フィルタリングされた店舗
-  const filteredPlaces = places?.filter((place) => {
-    if (selectedGenre && place.genreParent !== selectedGenre) return false;
-    if (selectedBudget) {
-      const matchLunch = place.budgetLunch === selectedBudget;
-      const matchDinner = place.budgetDinner === selectedBudget;
-      if (!matchLunch && !matchDinner) return false;
-    }
-    // 距離フィルタは現在地がある場合のみ
-    if (selectedDistance && currentLocation && place.latitude && place.longitude) {
-      const distance = calculateDistance(
-        currentLocation.lat,
-        currentLocation.lng,
-        parseFloat(place.latitude),
-        parseFloat(place.longitude)
-      );
-      const maxDistance = parseInt(selectedDistance);
-      if (distance > maxDistance) return false;
-    }
-    return true;
-  });
+  const filteredPlaces = places;
 
   // 距離計算（メートル）
   function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -373,27 +320,7 @@ export default function Home() {
     }
   };
 
-  const handleQuickFilter = () => {
-    const params = new URLSearchParams();
-    if (selectedGenre) params.set("genreParent", selectedGenre);
-    if (selectedBudget) params.set("budgetLunch", selectedBudget);
-    if (selectedDistance && currentLocation) {
-      params.set("distance", selectedDistance);
-      params.set("lat", currentLocation.lat.toString());
-      params.set("lng", currentLocation.lng.toString());
-    }
-    if (params.toString()) {
-      setLocation(`/search?${params.toString()}`);
-    }
-  };
-
-  const clearFilters = () => {
-    setSelectedGenre("");
-    setSelectedDistance("");
-    setSelectedBudget("");
-  };
-
-  const hasActiveFilters = selectedGenre || selectedDistance || selectedBudget;
+  const hasActiveFilters = false;
 
   const handleStatusChange = async (placeId: number, status: PlaceStatus) => {
     try {
@@ -565,93 +492,23 @@ export default function Home() {
               className="pl-9 pr-4 h-10 text-base"
             />
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0"
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            <Filter className={`w-5 h-5 ${hasActiveFilters ? "text-primary" : ""}`} />
-          </Button>
         </div>
 
-        {/* クイックフィルタ */}
-        {showFilters && (
-          <div className="mt-3 space-y-2">
-            {/* ジャンル選択（横スクロール） */}
-            <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3 scrollbar-hide">
-              <Button
-                variant={selectedGenre === "" ? "default" : "outline"}
-                size="sm"
-                className="shrink-0 h-9"
-                onClick={() => setSelectedGenre("")}
-              >
-                すべて
-              </Button>
-              {PARENT_GENRES.map((genre) => (
-                <Button
-                  key={genre.id}
-                  variant={selectedGenre === genre.id ? "default" : "outline"}
-                  size="sm"
-                  className="shrink-0 h-9 gap-1"
-                  onClick={() => setSelectedGenre(genre.id)}
-                >
-                  {genreIcons[genre.id] || <Utensils className="w-4 h-4" />}
-                  {genre.name}
-                </Button>
-              ))}
-            </div>
-
-            {/* 距離・予算セレクト */}
-            <div className="flex gap-2">
-              <Select value={selectedDistance} onValueChange={setSelectedDistance}>
-                <SelectTrigger className="flex-1 h-10">
-                  <SelectValue placeholder="距離" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">距離指定なし</SelectItem>
-                  {DISTANCE_OPTIONS.filter(opt => opt.meters !== null).map((opt) => (
-                    <SelectItem key={opt.id} value={opt.meters?.toString() || ''}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedBudget} onValueChange={setSelectedBudget}>
-                <SelectTrigger className="flex-1 h-10">
-                  <SelectValue placeholder="予算" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">予算指定なし</SelectItem>
-                  {BUDGET_BANDS.lunch.map((opt) => (
-                    <SelectItem key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {hasActiveFilters && (
-                <Button variant="ghost" size="icon" onClick={clearFilters} className="shrink-0">
-                  <X className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
-
-            {/* 詳細検索ボタン */}
-            <Link href="/search">
-              <Button
-                variant="outline"
-                className="w-full h-12 text-base"
-                type="button"
-              >
-                <Filter className="w-5 h-5 mr-2" />
-                詳細条件で検索
-              </Button>
-            </Link>
-          </div>
-        )}
+        <div className="mt-3 flex gap-2">
+          <Link href="/search?distanceRadius=1000">
+            <Button variant="outline" className="h-10 px-4">
+              近くで探す
+            </Button>
+          </Link>
+          <Link href="/search">
+            <Button variant="outline" className="h-10 px-4">
+              条件で探す
+            </Button>
+          </Link>
+          <Link href="/add">
+            <Button className="h-10 px-4">店舗追加</Button>
+          </Link>
+        </div>
       </header>
 
       {/* マップエリア */}
