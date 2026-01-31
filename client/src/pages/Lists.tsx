@@ -3,6 +3,8 @@ import { getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import EmptyState from "@/components/EmptyState";
+import ListCardSkeleton from "@/components/ListCardSkeleton";
 import {
   Drawer,
   DrawerContent,
@@ -208,9 +210,7 @@ export default function Lists() {
       {/* Content */}
       <main className="flex-1 px-4 py-4 pb-24">
         {isLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
+          <ListCardSkeleton count={4} />
         ) : (lists && lists.length > 0) || (sharedLists && sharedLists.length > 0) ? (
           <div className="space-y-6">
             {lists && lists.length > 0 && (
@@ -286,17 +286,13 @@ export default function Lists() {
             )}
           </div>
         ) : (
-          <div className="text-center py-12">
-            <Folder className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
-            <h2 className="text-lg font-medium mb-2">リストがありません</h2>
-            <p className="text-muted-foreground mb-4 text-sm">
-              お店を整理するためのリストを作成しましょう
-            </p>
-            <Button onClick={() => setIsCreateOpen(true)} className="h-12">
-              <Plus className="w-4 h-4 mr-2" />
-              リストを作成
-            </Button>
-          </div>
+          <EmptyState
+            title="リストがありません"
+            description="お店を整理するためのリストを作成しましょう"
+            icon={Folder}
+            actionLabel="リストを作成"
+            onAction={() => setIsCreateOpen(true)}
+          />
         )}
       </main>
 

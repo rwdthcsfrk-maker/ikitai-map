@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { MapView } from "@/components/Map";
+import PlaceCardHeader from "@/components/PlaceCardHeader";
+import EmptyState from "@/components/EmptyState";
+import PlaceCardSkeleton from "@/components/PlaceCardSkeleton";
 import { trpc } from "@/lib/trpc";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
@@ -31,6 +34,7 @@ import {
   IceCream,
   Globe,
   Beer,
+  Star,
 } from "lucide-react";
 import { toast } from "sonner";
 import PlaceDetailDialog from "@/components/PlaceDetailDialog";
@@ -268,6 +272,13 @@ export default function Home() {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
+
+  const formatDistanceMeters = (distanceMeters: number) => {
+    if (distanceMeters < 1000) {
+      return `${Math.round(distanceMeters)}m`;
+    }
+    return `${(distanceMeters / 1000).toFixed(1)}km`;
+  };
 
   // マーカーを配置
   useEffect(() => {
@@ -693,9 +704,7 @@ export default function Home() {
           </DrawerHeader>
           <div className="flex-1 overflow-y-auto px-4 pb-4">
             {placesLoading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
-              </div>
+              <PlaceCardSkeleton count={4} />
             ) : filteredPlaces && filteredPlaces.length > 0 ? (
               <div className="space-y-3">
                 {recentPlaces.length > 0 && (
@@ -742,41 +751,68 @@ export default function Home() {
                     }}
                   >
                     <CardContent className="p-3">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            {getStatusIcon(place.status as PlaceStatus)}
-                            <h3 className="font-semibold text-sm truncate">{place.name}</h3>
-                          </div>
-                          <p className="text-xs text-muted-foreground truncate mb-1">
-                            {place.genre || place.genreParent || "ジャンル未設定"}
-                            {place.address && ` · ${place.address.split(" ")[0]}`}
-                          </p>
-                          {place.summary && (
-                            <p className="text-xs text-muted-foreground line-clamp-2">{place.summary}</p>
-                          )}
-                          {place.userRating !== null && (
-                            <div className="mt-1 flex items-center gap-1">
-                              <span className="text-xs font-bold text-primary">{place.userRating}点</span>
-                              <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-primary rounded-full"
-                                  style={{ width: `${place.userRating}%` }}
-                                />
-                              </div>
+                      <div className="space-y-2">
+                        <PlaceCardHeader
+                          name={place.name}
+                          address={place.address ?? undefined}
+                          photoUrl={place.photoUrl ?? undefined}
+                          distanceLabel={
+                            currentLocation && place.latitude && place.longitude
+                              ? formatDistanceMeters(
+                                calculateDistance(
+                                  currentLocation.lat,
+                                  currentLocation.lng,
+                                  parseFloat(place.latitude),
+                                  parseFloat(place.longitude)
+                                )
+                              )
+                              : undefined
+                          }
+                          openLabel="情報なし"
+                          rightSlot={
+                            <div className="pt-0.5">
+                              {getStatusIcon(place.status as PlaceStatus)}
                             </div>
+                          }
+                        />
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                          <span>{place.genre || place.genreParent || "ジャンル未設定"}</span>
+                          {place.rating && (
+                            <span className="flex items-center gap-1 text-foreground">
+                              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                              {place.rating}
+                            </span>
                           )}
                         </div>
+                        {place.summary && (
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {place.summary}
+                          </p>
+                        )}
+                        {place.userRating !== null && (
+                          <div className="mt-1 flex items-center gap-1">
+                            <span className="text-xs font-bold text-primary">
+                              {place.userRating}点
+                            </span>
+                            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-primary rounded-full"
+                                style={{ width: `${place.userRating}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="shrink-0"
+                          size="sm"
+                          className="mt-1 w-full justify-between"
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedPlace(place.id);
                             setDetailDialogOpen(true);
                           }}
                         >
+                          詳細を見る
                           <ExternalLink className="w-4 h-4" />
                         </Button>
                       </div>
@@ -785,20 +821,24 @@ export default function Home() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8">
-                <MapPin className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-                <p className="text-muted-foreground text-sm mb-4">
-                  {hasActiveFilters ? "条件に一致する店舗がありません" : "まだ店舗が保存されていません"}
-                </p>
-                {!hasActiveFilters && (
-                  <Button asChild size="sm">
-                    <Link href="/add">
-                      <Plus className="w-4 h-4 mr-1" />
-                      店舗を追加
-                    </Link>
-                  </Button>
-                )}
-              </div>
+              <EmptyState
+                title={hasActiveFilters ? "条件に一致する店舗がありません" : "まだ店舗が保存されていません"}
+                description={
+                  hasActiveFilters
+                    ? "フィルタを外すか条件を変更してください"
+                    : "気になるお店を追加してリスト化しましょう"
+                }
+                icon={MapPin}
+                actionLabel={!hasActiveFilters ? "店舗を追加" : undefined}
+                onAction={
+                  !hasActiveFilters
+                    ? () => {
+                      setIsPlaceListOpen(false);
+                      setLocation("/add");
+                    }
+                    : undefined
+                }
+              />
             )}
           </div>
         </DrawerContent>

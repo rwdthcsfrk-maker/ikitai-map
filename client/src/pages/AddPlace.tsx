@@ -18,11 +18,9 @@ import {
   Star,
   Plus,
   List,
-  ExternalLink,
   Navigation,
   ChevronUp,
   X,
-  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -35,6 +33,11 @@ import {
 } from "@/components/ui/drawer";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import BottomNav from "@/components/BottomNav";
+import PlaceCardHeader from "@/components/PlaceCardHeader";
+import { showSavedToast } from "@/lib/toast";
+import PlaceActionBar from "@/components/PlaceActionBar";
+import PlaceCardSkeleton from "@/components/PlaceCardSkeleton";
+import { buildDirectionsUrl } from "@/lib/maps";
 
 interface PlaceResult {
   placeId: string;
@@ -259,7 +262,11 @@ export default function AddPlace() {
     try {
       const place = await createPlaceMutation.mutateAsync(payload);
       utils.place.list.invalidate();
-      toast.success("店舗を保存しました");
+      showSavedToast({
+        placeName: payload.name,
+        shareUrl: payload.googleMapsUrl,
+        onOpenLists: () => setLocation("/lists"),
+      });
 
       // 選択したリストに追加
       if (selectedLists.length > 0) {
@@ -819,6 +826,7 @@ export default function AddPlace() {
         savingRecommendedId={savingRecommendedId}
         isSaving={createPlaceMutation.isPending}
         onSave={handleSaveRecommended}
+        recommendedCardRefs={recommendedCardRefs}
       />
 
       <BottomNav />
@@ -906,115 +914,60 @@ function RecommendedPlaceCard({
 
   return (
     <Card className={`${variant === "stack" ? "w-full" : "w-60"} shrink-0 border bg-background/95 shadow-sm`}>
-      <CardContent className="p-3 space-y-3">
-        <div className="flex gap-3">
-          <div className="w-24 h-24 rounded-xl overflow-hidden bg-muted shrink-0">
-            {photoUrl ? (
-              <img
-                src={photoUrl}
-                alt={place.name}
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
-                No Image
-              </div>
-            )}
-          </div>
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold truncate">{place.name}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {place.address?.split(" ")[0]}
-                </p>
-              </div>
-              <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-1 rounded-full">
-                マッチ {matchScore}%
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              {place.rating && (
-                <span className="flex items-center gap-1 text-foreground">
-                  <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                  {place.rating}
-                </span>
-              )}
-              {place.userRatingsTotal && (
-                <span className="text-[10px] text-muted-foreground">
-                  {place.userRatingsTotal}件
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {sceneTokens.slice(0, 2).map((token) => (
-                <span
-                  key={token}
-                  className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground"
-                >
-                  {token}
-                </span>
-              ))}
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                {place.reason}
-              </span>
-              {showOpenNowTag && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-                  近くで今空いてそう
-                </span>
-              )}
-            </div>
-          </div>
+      <CardContent className="p-3 sm:p-4 space-y-3">
+        <PlaceCardHeader
+          name={place.name}
+          address={place.address}
+          photoUrl={photoUrl}
+          distanceLabel={distanceLabel}
+          openLabel={openingLabel}
+          rightSlot={(
+            <span className="text-[11px] font-semibold text-primary bg-primary/10 px-2 py-1 rounded-full">
+              マッチ {matchScore}%
+            </span>
+          )}
+        />
+
+        <div className="flex flex-wrap gap-1.5">
+          {place.rating && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted/40 text-muted-foreground">
+              ★ {place.rating}
+            </span>
+          )}
+          {sceneTokens.slice(0, 2).map((token) => (
+            <span
+              key={token}
+              className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground"
+            >
+              {token}
+            </span>
+          ))}
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+            {place.reason}
+          </span>
+          {showOpenNowTag && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+              近くで今空いてそう
+            </span>
+          )}
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted/40 text-muted-foreground">
+            価格帯 {priceLabel}
+          </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground">
-          <div className="rounded-lg bg-muted/40 px-2 py-1">
-            <span className="block text-[9px]">距離</span>
-            <span className="text-foreground">{distanceLabel}</span>
-          </div>
-          <div className="rounded-lg bg-muted/40 px-2 py-1">
-            <span className="block text-[9px]">営業時間</span>
-            <span className="text-foreground">{openingLabel}</span>
-          </div>
-          <div className="rounded-lg bg-muted/40 px-2 py-1">
-            <span className="block text-[9px]">価格帯</span>
-            <span className="text-foreground">{priceLabel}</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            size="sm"
-            className="h-9 text-xs"
-            onClick={() => onSave(place)}
-            disabled={
-              isSaving ||
-              savingRecommendedId === place.placeId ||
-              savedPlaceIds.has(place.placeId)
-            }
-          >
-            {savedPlaceIds.has(place.placeId) ? (
-              <>
-                <CheckCircle2 className="w-3 h-3 mr-1" />
-                追加済み
-              </>
-            ) : savingRecommendedId === place.placeId ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <>
-                <Plus className="w-3 h-3 mr-1" />
-                保存する
-              </>
-            )}
-          </Button>
-          <Button asChild size="sm" variant="outline" className="h-9 text-xs">
-            <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="w-3 h-3 mr-1" />
-              Google店舗
-            </a>
-          </Button>
-        </div>
+        <PlaceActionBar
+          onSave={() => onSave(place)}
+          saved={savedPlaceIds.has(place.placeId)}
+          saving={isSaving || savingRecommendedId === place.placeId}
+          shareUrl={place.googleMapsUrl}
+          routeUrl={buildDirectionsUrl({
+            lat: place.latitude,
+            lng: place.longitude,
+            address: place.address,
+            placeId: place.placeId,
+          })}
+          size="sm"
+        />
       </CardContent>
     </Card>
   );
@@ -1036,6 +989,7 @@ function RecommendedSheet({
   savingRecommendedId,
   isSaving,
   onSave,
+  recommendedCardRefs,
 }: {
   isOpen: boolean;
   onToggle: () => void;
@@ -1073,6 +1027,7 @@ function RecommendedSheet({
     googleMapsUrl: string;
     reason?: string;
   }, index?: number) => void;
+  recommendedCardRefs: React.MutableRefObject<Array<HTMLDivElement | null>>;
 }) {
   const sceneTokens = sceneInput.trim().length > 0
     ? sceneInput.split(/[、,\s]+/).filter(Boolean)
@@ -1166,26 +1121,30 @@ function RecommendedSheet({
           </div>
 
           <div className="mt-4 space-y-4 max-h-[52vh] overflow-y-auto pr-1">
-          {recommendedPlaces.map((place, index) => (
-            <div
-              key={place.placeId}
-              ref={(element) => {
-                recommendedCardRefs.current[index] = element;
-              }}
-            >
-              <RecommendedPlaceCard
-                place={place}
-                currentLocation={currentLocation}
-                savedPlaceIds={savedPlaceIds}
-                savingRecommendedId={savingRecommendedId}
-                isSaving={isSaving}
-                onSave={(payload) => onSave(payload, index)}
-                sceneTokens={sceneTokens}
-                variant="stack"
-              />
-            </div>
-          ))}
-        </div>
+            {recommendedLoading ? (
+              <PlaceCardSkeleton count={3} />
+            ) : (
+              recommendedPlaces.map((place, index) => (
+                <div
+                  key={place.placeId}
+                  ref={(element) => {
+                    recommendedCardRefs.current[index] = element;
+                  }}
+                >
+                  <RecommendedPlaceCard
+                    place={place}
+                    currentLocation={currentLocation}
+                    savedPlaceIds={savedPlaceIds}
+                    savingRecommendedId={savingRecommendedId}
+                    isSaving={isSaving}
+                    onSave={(payload) => onSave(payload, index)}
+                    sceneTokens={sceneTokens}
+                    variant="stack"
+                  />
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>

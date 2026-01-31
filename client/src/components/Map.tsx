@@ -76,9 +76,10 @@
 
 /// <reference types="@types/google.maps" />
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePersistFn } from "@/hooks/usePersistFn";
 import { cn } from "@/lib/utils";
+import MapSkeleton from "@/components/MapSkeleton";
 
 declare global {
   interface Window {
@@ -172,6 +173,7 @@ export function MapView({
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   const init = usePersistFn(async () => {
     await loadMapScript();
@@ -196,6 +198,7 @@ export function MapView({
     if (onMapReady) {
       onMapReady(map.current);
     }
+    setIsLoaded(true);
   });
 
   useEffect(() => {
@@ -203,6 +206,9 @@ export function MapView({
   }, [init]);
 
   return (
-    <div ref={mapContainer} className={cn("w-full h-[500px]", className)} />
+    <div className={cn("relative w-full h-[500px]", className)}>
+      {!isLoaded && <MapSkeleton className="absolute inset-0" />}
+      <div ref={mapContainer} className="absolute inset-0" />
+    </div>
   );
 }

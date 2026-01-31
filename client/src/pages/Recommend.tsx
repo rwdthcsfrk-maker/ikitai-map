@@ -2,16 +2,19 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import PlaceCardHeader from "@/components/PlaceCardHeader";
+import EmptyState from "@/components/EmptyState";
+import PlaceCardSkeleton from "@/components/PlaceCardSkeleton";
+import PlaceActionBar from "@/components/PlaceActionBar";
 import { trpc } from "@/lib/trpc";
+import { showSavedToast } from "@/lib/toast";
+import { buildDirectionsUrl } from "@/lib/maps";
 import { useState, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   ArrowLeft,
   Loader2,
-  MapPin,
   Star,
-  Plus,
-  CheckCircle2,
   Sparkles,
   Navigation,
 } from "lucide-react";
@@ -20,6 +23,7 @@ import BottomNav from "@/components/BottomNav";
 
 export default function Recommend() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [savingPlaceId, setSavingPlaceId] = useState<string | null>(null);
 
@@ -42,15 +46,7 @@ export default function Recommend() {
       .filter((placeId): placeId is string => Boolean(placeId))
   );
 
-  const createPlaceMutation = trpc.place.create.useMutation({
-    onSuccess: () => {
-      utils.place.list.invalidate();
-      toast.success("行きたいに追加しました");
-    },
-    onError: () => {
-      toast.error("追加に失敗しました");
-    },
-  });
+  const createPlaceMutation = trpc.place.create.useMutation();
 
   // 現在地を取得
   useEffect(() => {
@@ -73,6 +69,26 @@ export default function Recommend() {
     );
   }, [currentLocation]);
 
+  const formatDistanceKm = (distanceKm: number) => {
+    if (distanceKm < 1) {
+      return `${Math.round(distanceKm * 1000)}m`;
+    }
+    return `${distanceKm.toFixed(1)}km`;
+  };
+
+  const getDistanceKm = (from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const toRad = (value: number) => (value * Math.PI) / 180;
+    const dLat = toRad(to.lat - from.lat);
+    const dLng = toRad(to.lng - from.lng);
+    const lat1 = toRad(from.lat);
+    const lat2 = toRad(to.lat);
+
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return 6371 * c;
+  };
+
   const handleSaveRecommended = (place: {
     placeId: string;
     name: string;
@@ -87,8 +103,8 @@ export default function Recommend() {
       return;
     }
     setSavingPlaceId(place.placeId);
-    createPlaceMutation.mutate(
-      {
+    createPlaceMutation
+      .mutateAsync({
         googlePlaceId: place.placeId,
         name: place.name,
         address: place.address,
@@ -97,11 +113,23 @@ export default function Recommend() {
         rating: place.rating,
         source: "Google",
         googleMapsUrl: place.googleMapsUrl,
-      },
-      {
-        onSettled: () => setSavingPlaceId(null),
-      }
-    );
+      })
+      .then(() => {
+        utils.place.list.invalidate();
+        showSavedToast({
+          placeName: place.name,
+          shareUrl: place.googleMapsUrl,
+          onOpenLists: () => {
+            setLocation("/lists");
+          },
+        });
+      })
+      .catch(() => {
+        toast.error("追加に失敗しました");
+      })
+      .finally(() => {
+        setSavingPlaceId(null);
+      });
   };
 
   if (authLoading) {
@@ -163,78 +191,71 @@ export default function Recommend() {
       {/* メインコンテンツ */}
       <div className="flex-1 overflow-y-auto pb-20">
         {recommendedLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <div className="p-4">
+            <PlaceCardSkeleton count={4} />
           </div>
         ) : recommendedPlaces && recommendedPlaces.length > 0 ? (
           <div className="p-4 space-y-3">
-            {recommendedPlaces.map((place) => (
+            {recommendedPlaces.map((place) => {
+              const distanceLabel = currentLocation
+                ? formatDistanceKm(
+                  getDistanceKm(currentLocation, {
+                    lat: place.latitude,
+                    lng: place.longitude,
+                  })
+                )
+                : undefined;
+              return (
               <Card key={place.placeId} className="overflow-hidden">
-                <CardContent className="p-4">
-                  <div className="flex gap-4">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-base truncate">{place.name}</h3>
-                      <p className="text-sm text-muted-foreground truncate flex items-center gap-1 mt-1">
-                        <MapPin className="w-3 h-3 shrink-0" />
-                        {place.address?.split(" ")[0]}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="space-y-3">
+                    <PlaceCardHeader
+                      name={place.name}
+                      address={place.address ?? undefined}
+                      distanceLabel={distanceLabel}
+                      openLabel="情報なし"
+                    />
+                    {place.reason && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">
                         {place.reason}
                       </p>
-                      <div className="flex items-center gap-3 mt-3">
-                        {place.rating && (
-                          <span className="flex items-center gap-1 text-sm">
-                            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                            {place.rating}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex flex-col justify-between items-end shrink-0">
-                      <Button
-                        size="sm"
-                        className="h-9 px-4"
-                        onClick={() => handleSaveRecommended(place)}
-                        disabled={
-                          createPlaceMutation.isPending ||
-                          savingPlaceId === place.placeId ||
-                          savedPlaceIds.has(place.placeId)
-                        }
-                      >
-                        {savedPlaceIds.has(place.placeId) ? (
-                          <>
-                            <CheckCircle2 className="w-4 h-4 mr-1" />
-                            追加済み
-                          </>
-                        ) : savingPlaceId === place.placeId ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>
-                            <Plus className="w-4 h-4 mr-1" />
-                            追加
-                          </>
-                        )}
-                      </Button>
-                    </div>
+                    )}
+                    {place.rating && (
+                      <span className="flex items-center gap-1 text-sm">
+                        <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                        {place.rating}
+                      </span>
+                    )}
+                    <PlaceActionBar
+                      onSave={() => handleSaveRecommended(place)}
+                      saved={savedPlaceIds.has(place.placeId)}
+                      saving={
+                        createPlaceMutation.isPending || savingPlaceId === place.placeId
+                      }
+                      shareUrl={place.googleMapsUrl}
+                      routeUrl={buildDirectionsUrl({
+                        lat: place.latitude,
+                        lng: place.longitude,
+                        address: place.address,
+                        placeId: place.placeId,
+                      })}
+                      size="sm"
+                    />
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            );})}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
-            <Sparkles className="w-16 h-16 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">おすすめを表示できません</h3>
-            <p className="text-muted-foreground text-sm">
-              店舗を保存すると、あなたの好みに合ったおすすめが表示されます
-            </p>
-            <Link href="/add">
-              <Button className="mt-4">
-                <Plus className="w-4 h-4 mr-2" />
-                店舗を追加する
-              </Button>
-            </Link>
-          </div>
+          <EmptyState
+            title="おすすめを表示できません"
+            description="店舗を保存すると、あなたの好みに合ったおすすめが表示されます"
+            icon={Sparkles}
+            actionLabel="店舗を追加する"
+            onAction={() => {
+              setLocation("/add");
+            }}
+          />
         )}
       </div>
 

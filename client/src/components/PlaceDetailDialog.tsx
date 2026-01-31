@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import PlaceActionBar from "@/components/PlaceActionBar";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { trpc } from "@/lib/trpc";
 import { useState, useEffect } from "react";
-import { Star, MapPin, ExternalLink, Heart, Check, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Star, MapPin, Heart, Check, Loader2, Pencil, Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +24,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { buildDirectionsUrl } from "@/lib/maps";
 
 interface Place {
   id: number;
@@ -306,27 +308,27 @@ export default function PlaceDetailDialog({
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col gap-2 pt-2">
-            <div className="flex gap-2">
-              <Button
-                className="flex-1"
-                onClick={handleSaveRating}
-                disabled={updateRatingMutation.isPending}
-              >
-                {updateRatingMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : null}
-                評価を保存
-              </Button>
-              {place.googleMapsUrl && (
-                <Button variant="outline" asChild>
-                  <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    Googleマップ
-                  </a>
-                </Button>
-              )}
-            </div>
+          <div className="flex flex-col gap-3 pt-2">
+            <Button
+              className="w-full"
+              onClick={handleSaveRating}
+              disabled={updateRatingMutation.isPending}
+            >
+              {updateRatingMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : null}
+              評価を保存
+            </Button>
+            <PlaceActionBar
+              onSave={() =>
+                handleStatusChange(place.status === "want_to_go" ? "none" : "want_to_go")
+              }
+              saved={place.status === "want_to_go"}
+              shareUrl={place.googleMapsUrl ?? undefined}
+              routeUrl={buildDirectionsUrl({
+                address: place.address ?? undefined,
+              })}
+            />
             
             {/* Edit & Delete */}
             <div className="flex gap-2 pt-2 border-t">

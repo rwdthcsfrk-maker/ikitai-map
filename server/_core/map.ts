@@ -128,19 +128,6 @@ export type DirectionsResult = {
   status: string;
 };
 
-export type DistanceMatrixResult = {
-  rows: Array<{
-    elements: Array<{
-      distance: { text: string; value: number };
-      duration: { text: string; value: number };
-      status: string;
-    }>;
-  }>;
-  origin_addresses: string[];
-  destination_addresses: string[];
-  status: string;
-};
-
 export type GeocodingResult = {
   results: Array<{
     address_components: Array<{

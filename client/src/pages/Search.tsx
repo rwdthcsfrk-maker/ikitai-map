@@ -10,7 +10,6 @@ import {
   ArrowLeft,
   Search as SearchIcon,
   Loader2,
-  MapPin,
   Star,
   ExternalLink,
   X,
@@ -22,6 +21,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import BottomNav from "@/components/BottomNav";
+import PlaceCardHeader from "@/components/PlaceCardHeader";
+import EmptyState from "@/components/EmptyState";
+import PlaceCardSkeleton from "@/components/PlaceCardSkeleton";
 import {
   Drawer,
   DrawerContent,
@@ -287,7 +289,7 @@ export default function Search() {
         個室あり: "private_room_yes",
       };
       const mappedFeatures = (result.features || [])
-        .map((feature) => featureMap[feature])
+        .map((feature: string) => featureMap[feature])
         .filter(Boolean);
       const genreId = genresData?.parents.find(
         (genre) => genre.name.includes(result.genre || "")
@@ -898,9 +900,7 @@ export default function Search() {
       {/* Results */}
       <main className="flex-1 px-4 py-4 pb-24 overflow-y-auto">
         {isLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
+          <PlaceCardSkeleton count={5} />
         ) : sortedSearchResults && sortedSearchResults.length > 0 ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
@@ -953,80 +953,83 @@ export default function Search() {
                 : null;
               return (
                 <Card key={place.id} className="active:scale-[0.98] transition-transform">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-base truncate">{place.name}</h3>
-                          {getStatusIcon(place.status as PlaceStatus)}
-                        </div>
-
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          {place.genre && (
-                            <span className="text-xs bg-muted px-2 py-0.5 rounded">{place.genre}</span>
-                          )}
-                          {place.rating && (
-                            <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                              <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                              {place.rating}
-                            </span>
-                          )}
-                          {place.userRating && (
-                            <span className="flex items-center gap-0.5 text-xs text-primary">
-                              <Star className="w-3 h-3 fill-primary" />
-                              {place.userRating}
-                            </span>
-                          )}
-                          {distanceDisplay === "distance" && distanceLabel && (
-                            <span className="text-xs text-muted-foreground">
-                              現在地から{distanceLabel}
-                            </span>
-                          )}
-                          {distanceDisplay === "time" && (
-                            <span className="text-xs text-muted-foreground">
-                              {travelLabel || "時間情報なし"}
-                            </span>
-                          )}
-                        </div>
-
-                        {place.summary && (
-                          <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-                            {place.summary}
-                          </p>
-                        )}
-
-                        {place.features && place.features.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            {place.features.slice(0, 3).map((feature, i) => (
-                              <span
-                                key={i}
-                                className="text-xs px-2 py-0.5 rounded-full border bg-muted border-transparent"
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="space-y-3">
+                      <PlaceCardHeader
+                        name={place.name}
+                        address={place.address ?? undefined}
+                        photoUrl={place.photoUrl ?? undefined}
+                        distanceLabel={
+                          distanceDisplay === "distance"
+                            ? distanceLabel || undefined
+                            : travelLabel || "時間情報なし"
+                        }
+                        openLabel="情報なし"
+                        rightSlot={
+                          <div className="flex items-center gap-2">
+                            {getStatusIcon(place.status as PlaceStatus)}
+                            {place.googleMapsUrl && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                asChild
                               >
-                                {feature}
-                              </span>
-                            ))}
-                            {place.features.length > 3 && (
-                              <span className="text-xs text-muted-foreground">
-                                +{place.features.length - 3}
-                              </span>
+                                <a
+                                  href={place.googleMapsUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </a>
+                              </Button>
                             )}
                           </div>
-                        )}
+                        }
+                      />
 
-                        {place.address && (
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <MapPin className="w-3 h-3" />
-                            <span className="truncate">{place.address}</span>
-                          </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {place.genre && (
+                          <span className="text-xs bg-muted px-2 py-0.5 rounded">
+                            {place.genre}
+                          </span>
+                        )}
+                        {place.rating && (
+                          <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
+                            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                            {place.rating}
+                          </span>
+                        )}
+                        {place.userRating && (
+                          <span className="flex items-center gap-0.5 text-xs text-primary">
+                            <Star className="w-3 h-3 fill-primary" />
+                            {place.userRating}
+                          </span>
                         )}
                       </div>
 
-                      {place.googleMapsUrl && (
-                        <Button variant="ghost" size="icon" className="shrink-0 h-10 w-10" asChild>
-                          <a href={place.googleMapsUrl} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        </Button>
+                      {place.summary && (
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {place.summary}
+                        </p>
+                      )}
+
+                      {place.features && place.features.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {place.features.slice(0, 3).map((feature: string, i) => (
+                            <span
+                              key={i}
+                              className="text-xs px-2 py-0.5 rounded-full border bg-muted border-transparent"
+                            >
+                              {feature}
+                            </span>
+                          ))}
+                          {place.features.length > 3 && (
+                            <span className="text-xs text-muted-foreground">
+                              +{place.features.length - 3}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </CardContent>
@@ -1036,19 +1039,17 @@ export default function Search() {
 
           </div>
         ) : searchQuery.trim() || activeFilterCount > 0 ? (
-          <div className="text-center py-12">
-            <SearchIcon className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
-            <p className="text-muted-foreground">該当する店舗がありません</p>
-          </div>
+          <EmptyState
+            title="該当する店舗がありません"
+            description="条件を変更して再検索してください"
+            icon={SearchIcon}
+          />
         ) : (
-          <div className="text-center py-12">
-            <SearchIcon className="w-12 h-12 mx-auto mb-3 text-muted-foreground/50" />
-            <p className="text-muted-foreground text-sm">
-              キーワードを入力するか、
-              <br />
-              条件を選択して検索してください
-            </p>
-          </div>
+          <EmptyState
+            title="検索条件を入力してください"
+            description="キーワード入力か、絞り込み条件を選択してください"
+            icon={SearchIcon}
+          />
         )}
       </main>
 

@@ -2,8 +2,11 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import PlaceCardHeader from "@/components/PlaceCardHeader";
+import EmptyState from "@/components/EmptyState";
+import PlaceCardSkeleton from "@/components/PlaceCardSkeleton";
 import { trpc } from "@/lib/trpc";
-import { Link, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import { ArrowLeft, ExternalLink, Loader2, MapPin, Star, Trash2, UtensilsCrossed, Users } from "lucide-react";
 import {
   Drawer,
@@ -29,6 +32,7 @@ export default function ListDetail() {
   const { id } = useParams<{ id: string }>();
   const listId = parseInt(id || "0");
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const [, setLocation] = useLocation();
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"viewer" | "editor">("viewer");
@@ -92,8 +96,8 @@ export default function ListDetail() {
 
   if (authLoading || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-background p-4">
+        <PlaceCardSkeleton count={3} />
       </div>
     );
   }
@@ -171,87 +175,78 @@ export default function ListDetail() {
           <div className="space-y-4">
             {list.places.map((place) => (
               <Card key={place.id} className="place-card">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-lg truncate">{place.name}</h3>
-                        {place.genre && (
-                          <span className="feature-tag shrink-0">{place.genre}</span>
-                        )}
-                      </div>
-
-                      {place.summary && (
-                        <p className="text-sm text-muted-foreground mb-3">
-                          {place.summary}
-                        </p>
-                      )}
-
-                      {place.features && place.features.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-3">
-                          {place.features.map((feature, i) => (
-                            <span key={i} className="feature-tag text-xs">
-                              {feature}
-                            </span>
-                          ))}
+                <CardContent className="p-3 sm:p-4">
+                  <div className="space-y-3">
+                    <PlaceCardHeader
+                      name={place.name}
+                      address={place.address ?? undefined}
+                      photoUrl={place.photoUrl ?? undefined}
+                      openLabel="情報なし"
+                      rightSlot={
+                        <div className="flex flex-col gap-2 items-end">
+                          {place.googleMapsUrl && (
+                            <Button variant="outline" size="sm" asChild>
+                              <a
+                                href={place.googleMapsUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                            </Button>
+                          )}
+                          {canEdit && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() => handleRemovePlace(place.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
-                      )}
+                      }
+                    />
 
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        {place.rating && (
-                          <span className="flex items-center gap-1">
-                            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                            {place.rating}
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                      {place.genre && <span className="feature-tag shrink-0">{place.genre}</span>}
+                      {place.rating && (
+                        <span className="flex items-center gap-1">
+                          <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                          {place.rating}
+                        </span>
+                      )}
+                    </div>
+
+                    {place.summary && (
+                      <p className="text-sm text-muted-foreground">{place.summary}</p>
+                    )}
+
+                    {place.features && place.features.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {place.features.map((feature, i) => (
+                          <span key={i} className="feature-tag text-xs">
+                            {feature}
                           </span>
-                        )}
-                        {place.address && (
-                          <span className="flex items-center gap-1 truncate">
-                            <MapPin className="w-4 h-4 shrink-0" />
-                            {place.address}
-                          </span>
-                        )}
+                        ))}
                       </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2 shrink-0">
-                      {place.googleMapsUrl && (
-                        <Button variant="outline" size="sm" asChild>
-                          <a
-                            href={place.googleMapsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        </Button>
-                      )}
-                      {canEdit && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => handleRemovePlace(place.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : (
-          <div className="text-center py-12">
-            <MapPin className="w-16 h-16 mx-auto mb-4 text-muted-foreground/50" />
-            <h2 className="text-lg font-medium mb-2">店舗がありません</h2>
-            <p className="text-muted-foreground mb-4">
-              このリストにはまだ店舗が追加されていません
-            </p>
-            <Button asChild>
-              <Link href="/add">店舗を追加</Link>
-            </Button>
-          </div>
+          <EmptyState
+            title="店舗がありません"
+            description="このリストにはまだ店舗が追加されていません"
+            icon={MapPin}
+            actionLabel="店舗を追加"
+            onAction={() => {
+              setLocation("/add");
+            }}
+          />
         )}
       </main>
 
