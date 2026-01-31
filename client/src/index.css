@@ -168,6 +168,11 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 
+  .safe-area-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
   .current-location-pulse {
     position: relative;
   }

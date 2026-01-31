@@ -392,6 +392,7 @@ export default function AddPlace() {
       }
       setSelectedPlace(place);
       setIsResultsOpen(false);
+      setIsRecommendOpen(false);
 
       if (map) {
         map.panTo({ lat: place.lat, lng: place.lng });
@@ -848,31 +849,33 @@ export default function AddPlace() {
         </DrawerContent>
       </Drawer>
 
-      <RecommendedSheet
-        isOpen={isRecommendOpen}
-        onToggle={() => setIsRecommendOpen((prev) => !prev)}
-        onTouchStart={(event) => {
-          sheetTouchStartY.current = event.touches[0]?.clientY ?? null;
-        }}
-        onTouchEnd={(event) => {
-          if (sheetTouchStartY.current === null) return;
-          const endY = event.changedTouches[0]?.clientY ?? sheetTouchStartY.current;
-          const delta = sheetTouchStartY.current - endY;
-          if (delta > 40) setIsRecommendOpen(true);
-          if (delta < -40) setIsRecommendOpen(false);
-          sheetTouchStartY.current = null;
-        }}
-        sceneInput={sceneInput}
-        onSceneChange={setSceneInput}
-        recommendedPlaces={recommendedPlaces || []}
-        recommendedLoading={recommendedLoading}
-        currentLocation={currentLocation}
-        savedPlaceIds={savedPlaceIds}
-        savingRecommendedId={savingRecommendedId}
-        isSaving={createPlaceMutation.isPending}
-        onSave={handleSaveRecommended}
-        recommendedCardRefs={recommendedCardRefs}
-      />
+      {!selectedPlace && (
+        <RecommendedSheet
+          isOpen={isRecommendOpen}
+          onToggle={() => setIsRecommendOpen((prev) => !prev)}
+          onTouchStart={(event) => {
+            sheetTouchStartY.current = event.touches[0]?.clientY ?? null;
+          }}
+          onTouchEnd={(event) => {
+            if (sheetTouchStartY.current === null) return;
+            const endY = event.changedTouches[0]?.clientY ?? sheetTouchStartY.current;
+            const delta = sheetTouchStartY.current - endY;
+            if (delta > 40) setIsRecommendOpen(true);
+            if (delta < -40) setIsRecommendOpen(false);
+            sheetTouchStartY.current = null;
+          }}
+          sceneInput={sceneInput}
+          onSceneChange={setSceneInput}
+          recommendedPlaces={recommendedPlaces || []}
+          recommendedLoading={recommendedLoading}
+          currentLocation={currentLocation}
+          savedPlaceIds={savedPlaceIds}
+          savingRecommendedId={savingRecommendedId}
+          isSaving={createPlaceMutation.isPending}
+          onSave={handleSaveRecommended}
+          recommendedCardRefs={recommendedCardRefs}
+        />
+      )}
 
       <BottomNav />
     </div>
