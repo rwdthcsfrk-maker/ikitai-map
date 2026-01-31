@@ -80,6 +80,7 @@ export default function Home() {
   const [isPlaceListOpen, setIsPlaceListOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [initialPlaceHandled, setInitialPlaceHandled] = useState(false);
+  const [recentPlaceIds, setRecentPlaceIds] = useState<number[]>([]);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
 
@@ -399,6 +400,31 @@ export default function Home() {
   };
 
   const selectedPlaceData = filteredPlaces?.find((p) => p.id === selectedPlace);
+  const recentPlaces = recentPlaceIds
+    .map((id) => places?.find((place) => place.id === id))
+    .filter((place): place is NonNullable<typeof place> => Boolean(place));
+
+  useEffect(() => {
+    const raw = localStorage.getItem("recentPlaces");
+    if (!raw) return;
+    try {
+      const ids = JSON.parse(raw);
+      if (Array.isArray(ids)) {
+        setRecentPlaceIds(ids.filter((id) => Number.isFinite(id)));
+      }
+    } catch {
+      localStorage.removeItem("recentPlaces");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!detailDialogOpen || !selectedPlaceData) return;
+    setRecentPlaceIds((prev) => {
+      const next = [selectedPlaceData.id, ...prev.filter((id) => id !== selectedPlaceData.id)].slice(0, 8);
+      localStorage.setItem("recentPlaces", JSON.stringify(next));
+      return next;
+    });
+  }, [detailDialogOpen, selectedPlaceData]);
 
   useEffect(() => {
     if (initialPlaceHandled || !places) return;
@@ -672,6 +698,38 @@ export default function Home() {
               </div>
             ) : filteredPlaces && filteredPlaces.length > 0 ? (
               <div className="space-y-3">
+                {recentPlaces.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2">最近見た店舗</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                      {recentPlaces.map((place) => (
+                        <Card
+                          key={`recent-${place.id}`}
+                          className="w-44 shrink-0 cursor-pointer active:scale-[0.98] transition-transform"
+                          onClick={() => {
+                            setSelectedPlace(place.id);
+                            setDetailDialogOpen(true);
+                          }}
+                        >
+                          <CardContent className="p-3">
+                            <p className="text-sm font-semibold truncate">{place.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {place.address?.split(" ")[0] || "住所未設定"}
+                            </p>
+                            <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                              {place.rating && (
+                                <span className="flex items-center gap-1 text-foreground">
+                                  <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                  {place.rating}
+                                </span>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {filteredPlaces.map((place) => (
                   <Card
                     key={place.id}

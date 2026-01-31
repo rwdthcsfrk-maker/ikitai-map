@@ -106,6 +106,8 @@ export default function AddPlace() {
   const [isRecommendOpen, setIsRecommendOpen] = useState(false);
   const [sceneInput, setSceneInput] = useState("");
   const [sceneQuery, setSceneQuery] = useState("");
+  const [saveMemo, setSaveMemo] = useState("");
+  const [saveNote, setSaveNote] = useState("");
   const sheetTouchStartY = useRef<number | null>(null);
   const recommendMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
@@ -391,6 +393,13 @@ export default function AddPlace() {
   );
 
 
+  const scrollToRecommendedIndex = (index: number) => {
+    recommendedCardRefs.current[index]?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
   const handleSaveRecommended = (place: {
     placeId: string;
     name: string;
@@ -401,7 +410,7 @@ export default function AddPlace() {
     longitude: number;
     googleMapsUrl: string;
     reason?: string;
-  }) => {
+  }, index?: number) => {
     if (savedPlaceIds.has(place.placeId)) {
       toast.success("すでに追加済みです");
       return;
@@ -414,11 +423,19 @@ export default function AddPlace() {
       latitude: place.latitude,
       longitude: place.longitude,
       rating: place.rating,
-      summary: place.reason,
+      summary: saveMemo ? `${place.reason || ""}\nメモ: ${saveMemo}`.trim() : place.reason,
       source: "Google",
       googleMapsUrl: place.googleMapsUrl,
     }, {
-      onSuccess: () => setSavingRecommendedId(null),
+      onSuccess: () => {
+        setSavingRecommendedId(null);
+        if (typeof index === "number") {
+          const nextIndex = Math.min(index + 1, recommendedCardRefs.current.length - 1);
+          if (nextIndex !== index) {
+            scrollToRecommendedIndex(nextIndex);
+          }
+        }
+      },
     }).catch(() => setSavingRecommendedId(null));
   };
 
@@ -447,6 +464,7 @@ export default function AddPlace() {
       console.error("Failed to generate summary:", error);
     }
 
+    const memoSummary = saveNote ? `${summary}\nメモ: ${saveNote}`.trim() : summary;
     await handleCreatePlace({
       googlePlaceId: selectedPlace.placeId,
       name: selectedPlace.name,
@@ -455,7 +473,7 @@ export default function AddPlace() {
       longitude: selectedPlace.lng,
       genre: genre || undefined,
       features: features.length > 0 ? features : undefined,
-      summary: summary || undefined,
+      summary: memoSummary || undefined,
       source: "Google",
       googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${selectedPlace.placeId}`,
       rating: selectedPlace.rating,
@@ -464,6 +482,7 @@ export default function AddPlace() {
     }, {
       redirect: true,
     });
+    setSaveNote("");
   };
 
   const toggleList = (listId: number) => {
@@ -698,6 +717,16 @@ export default function AddPlace() {
               </div>
             )}
 
+            <div className="space-y-2 mb-6">
+              <Label className="text-sm font-medium">保存メモ（任意）</Label>
+              <Input
+                value={saveNote}
+                onChange={(event) => setSaveNote(event.target.value)}
+                placeholder="気になった理由を一言で"
+                className="h-11"
+              />
+            </div>
+
             {(lists && lists.length > 0) || (sharedLists && sharedLists.length > 0) ? (
               <div className="space-y-3">
                 <Label className="text-sm font-medium">リストに追加（任意）</Label>
@@ -781,6 +810,8 @@ export default function AddPlace() {
         }}
         sceneInput={sceneInput}
         onSceneChange={setSceneInput}
+        saveMemo={saveMemo}
+        onSaveMemoChange={setSaveMemo}
         recommendedPlaces={recommendedPlaces || []}
         recommendedLoading={recommendedLoading}
         currentLocation={currentLocation}
@@ -845,6 +876,8 @@ function RecommendedPlaceCard({
           getDistanceKm(currentLocation, { lat: place.latitude, lng: place.longitude })
         )
       : "現在地未取得";
+  const distanceKm =
+    currentLocation ? getDistanceKm(currentLocation, { lat: place.latitude, lng: place.longitude }) : null;
   const openingLabel = detailsLoading
     ? "取得中"
     : details?.opening_hours
@@ -853,6 +886,8 @@ function RecommendedPlaceCard({
         : "営業時間外"
       : "情報なし";
   const priceLabel = detailsLoading ? "取得中" : formatPriceLevel(details?.price_level);
+  const showOpenNowTag =
+    details?.opening_hours?.open_now && distanceKm !== null && distanceKm <= 1.2;
 
   const matchScore = place.matchScore ?? (() => {
     const base = 62;
@@ -924,6 +959,11 @@ function RecommendedPlaceCard({
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                 {place.reason}
               </span>
+              {showOpenNowTag && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                  近くで今空いてそう
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -987,6 +1027,8 @@ function RecommendedSheet({
   onTouchEnd,
   sceneInput,
   onSceneChange,
+  saveMemo,
+  onSaveMemoChange,
   recommendedPlaces,
   recommendedLoading,
   currentLocation,
@@ -1001,6 +1043,8 @@ function RecommendedSheet({
   onTouchEnd: (event: ReactTouchEvent<HTMLDivElement>) => void;
   sceneInput: string;
   onSceneChange: (value: string) => void;
+  saveMemo: string;
+  onSaveMemoChange: (value: string) => void;
   recommendedPlaces: Array<{
     placeId: string;
     name: string;
@@ -1028,7 +1072,7 @@ function RecommendedSheet({
     longitude: number;
     googleMapsUrl: string;
     reason?: string;
-  }) => void;
+  }, index?: number) => void;
 }) {
   const sceneTokens = sceneInput.trim().length > 0
     ? sceneInput.split(/[、,\s]+/).filter(Boolean)
@@ -1109,7 +1153,19 @@ function RecommendedSheet({
             </div>
           </div>
 
-        <div className="mt-4 space-y-4 max-h-[52vh] overflow-y-auto pr-1">
+          <div className="mt-2 rounded-2xl border bg-card px-3 py-2 shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">メモ</span>
+              <Input
+                value={saveMemo}
+                onChange={(event) => onSaveMemoChange(event.target.value)}
+                placeholder="保存理由を一言（任意）"
+                className="h-9 border-0 bg-transparent px-0 text-sm focus-visible:ring-0"
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-4 max-h-[52vh] overflow-y-auto pr-1">
           {recommendedPlaces.map((place, index) => (
             <div
               key={place.placeId}
@@ -1123,7 +1179,7 @@ function RecommendedSheet({
                 savedPlaceIds={savedPlaceIds}
                 savingRecommendedId={savingRecommendedId}
                 isSaving={isSaving}
-                onSave={onSave}
+                onSave={(payload) => onSave(payload, index)}
                 sceneTokens={sceneTokens}
                 variant="stack"
               />

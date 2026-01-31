@@ -102,6 +102,7 @@ export default function Search() {
     features: initialFeatures.length > 0 ? initialFeatures : undefined,
     status: initialStatus,
   });
+  const [distanceDisplay, setDistanceDisplay] = useState<"distance" | "time">("distance");
   const [tempFilters, setTempFilters] = useState<FilterState>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -902,6 +903,27 @@ export default function Search() {
           </div>
         ) : sortedSearchResults && sortedSearchResults.length > 0 ? (
           <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {sortedSearchResults.length} 件の店舗
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={distanceDisplay === "distance" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDistanceDisplay("distance")}
+                >
+                  距離
+                </Button>
+                <Button
+                  variant={distanceDisplay === "time" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDistanceDisplay("time")}
+                >
+                  時間
+                </Button>
+              </div>
+            </div>
             {sortedSearchResults.map((place) => {
               const lat = place.latitude ? parseFloat(place.latitude) : null;
               const lng = place.longitude ? parseFloat(place.longitude) : null;
@@ -955,14 +977,14 @@ export default function Search() {
                               {place.userRating}
                             </span>
                           )}
-                          {distanceLabel && (
+                          {distanceDisplay === "distance" && distanceLabel && (
                             <span className="text-xs text-muted-foreground">
                               現在地から{distanceLabel}
                             </span>
                           )}
-                          {travelLabel && (
+                          {distanceDisplay === "time" && (
                             <span className="text-xs text-muted-foreground">
-                              {travelLabel}
+                              {travelLabel || "時間情報なし"}
                             </span>
                           )}
                         </div>
