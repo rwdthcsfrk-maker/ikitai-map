@@ -339,6 +339,7 @@ export default function AddPlace() {
     const appendResults = (results: google.maps.places.PlaceResult[]) => {
       results.forEach((place) => {
         if (collected.length >= SEARCH_RESULTS_LIMIT) return;
+        if (!place.place_id || !place.geometry?.location) return;
         collected.push({
           placeId: place.place_id || "",
           name: place.name || "",
@@ -378,6 +379,10 @@ export default function AddPlace() {
 
   const handleSelectPlace = useCallback(
     (place: PlaceResult) => {
+      if (!place.placeId || !place.lat || !place.lng) {
+        toast.error("店舗情報の取得に失敗しました。別の店舗を選択してください。");
+        return;
+      }
       setSelectedPlace(place);
       setIsResultsOpen(false);
 
@@ -468,6 +473,10 @@ export default function AddPlace() {
 
   const handleSave = async () => {
     if (!selectedPlace) return;
+    if (!selectedPlace.placeId) {
+      toast.error("店舗情報の取得に失敗しました。もう一度お試しください。");
+      return;
+    }
 
     // LLMで要約を生成
     let summary = "";
