@@ -14,7 +14,7 @@ export default function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-background border-t z-50 safe-area-bottom">
-      <div className="mx-auto flex w-full items-center justify-around h-16 px-4">
+      <div className="mx-auto flex w-full max-w-lg items-center justify-between h-16 px-6">
         {NAV_ITEMS.map((item) => {
           const isActive = item.href === "/"
             ? location === "/"
@@ -22,7 +22,7 @@ export default function BottomNav() {
               (item.href === "/search" && location.startsWith("/filter"));
           if (item.isPrimary) {
             return (
-              <Link key={item.href} href={item.href}>
+              <Link key={item.href} href={item.href} className="flex-1 flex justify-center">
                 <button
                   className="flex items-center justify-center w-14 h-14 -mt-6 rounded-full bg-primary text-primary-foreground shadow-lg"
                   aria-label={item.label}
@@ -33,9 +33,9 @@ export default function BottomNav() {
             );
           }
           return (
-            <Link key={item.href} href={item.href}>
+            <Link key={item.href} href={item.href} className="flex-1">
               <button
-                className={`flex flex-col items-center gap-1 px-4 py-2 ${
+                className={`flex w-full flex-col items-center gap-1 py-2 ${
                   isActive ? "text-primary" : "text-muted-foreground"
                 }`}
               >

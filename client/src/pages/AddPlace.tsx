@@ -111,6 +111,7 @@ export default function AddPlace() {
   const [sceneQuery, setSceneQuery] = useState("");
   const [saveMemo, setSaveMemo] = useState("");
   const [saveNote, setSaveNote] = useState("");
+  const shouldLockMap = isRecommendOpen || isResultsOpen || isSaveDrawerOpen;
   const sheetTouchStartY = useRef<number | null>(null);
   const recommendMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
@@ -315,6 +316,11 @@ export default function AddPlace() {
   useEffect(() => {
     centerMapOnCurrentLocation();
   }, [centerMapOnCurrentLocation]);
+
+  useEffect(() => {
+    if (!map) return;
+    map.setOptions({ gestureHandling: shouldLockMap ? "none" : "auto" });
+  }, [map, shouldLockMap]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim() || !placesServiceRef.current || !map) return;
@@ -593,7 +599,7 @@ export default function AddPlace() {
         <div className="relative flex-1">
           <MapView
             onMapReady={handleMapReady}
-            className="w-full h-full"
+            className={`w-full h-full ${shouldLockMap ? "pointer-events-none" : ""}`}
             initialCenter={{ lat: 35.6812, lng: 139.7671 }}
             initialZoom={12}
           />
