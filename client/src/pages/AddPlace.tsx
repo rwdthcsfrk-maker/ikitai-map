@@ -319,18 +319,27 @@ export default function AddPlace() {
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim() || !placesServiceRef.current || !map) return;
 
+    const SEARCH_RESULTS_LIMIT = 30;
+    const center = currentLocation ?? (() => {
+      const mapCenter = map.getCenter();
+      return mapCenter ? { lat: mapCenter.lat(), lng: mapCenter.lng() } : null;
+    })();
+
     setIsSearching(true);
     setSearchResults([]);
 
     const request: google.maps.places.TextSearchRequest = {
       query: searchQuery,
       type: "restaurant",
+      location: center ? new google.maps.LatLng(center.lat, center.lng) : undefined,
+      radius: center ? 3000 : undefined,
     };
 
-    placesServiceRef.current.textSearch(request, (results, status) => {
-      setIsSearching(false);
-      if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        const places: PlaceResult[] = results.slice(0, 10).map((place) => ({
+    const collected: PlaceResult[] = [];
+    const appendResults = (results: google.maps.places.PlaceResult[]) => {
+      results.forEach((place) => {
+        if (collected.length >= SEARCH_RESULTS_LIMIT) return;
+        collected.push({
           placeId: place.place_id || "",
           name: place.name || "",
           address: place.formatted_address || "",
@@ -340,21 +349,32 @@ export default function AddPlace() {
           priceLevel: place.price_level,
           types: place.types,
           photoUrl: place.photos?.[0]?.getUrl({ maxWidth: 400 }),
-        }));
-        setSearchResults(places);
+        });
+      });
+      setSearchResults([...collected]);
+    };
+
+    placesServiceRef.current.textSearch(request, (results, status, pagination) => {
+      if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+        appendResults(results);
+        if (pagination?.hasNextPage && collected.length < SEARCH_RESULTS_LIMIT) {
+          pagination.nextPage();
+          return;
+        }
+        setIsSearching(false);
         setIsResultsOpen(true);
 
-        // 検索結果が見えるようにマップを調整
-        if (places.length > 0) {
+        if (collected.length > 0) {
           const bounds = new google.maps.LatLngBounds();
-          places.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
+          collected.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
           map.fitBounds(bounds);
         }
       } else {
+        setIsSearching(false);
         toast.error("検索結果が見つかりませんでした");
       }
     });
-  }, [searchQuery, map]);
+  }, [searchQuery, map, currentLocation]);
 
   const handleSelectPlace = useCallback(
     (place: PlaceResult) => {
