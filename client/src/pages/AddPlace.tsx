@@ -19,6 +19,7 @@ import {
   Plus,
   List,
   ExternalLink,
+  Navigation,
   ChevronUp,
   X,
   CheckCircle2,
@@ -108,6 +109,7 @@ export default function AddPlace() {
   const sheetTouchStartY = useRef<number | null>(null);
   const recommendMarkersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
   const currentLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
+  const recommendedCardRefs = useRef<Array<HTMLDivElement | null>>([]);
   const sceneDebounceRef = useRef<number | null>(null);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const placesServiceRef = useRef<google.maps.places.PlacesService | null>(null);
@@ -183,6 +185,18 @@ export default function AddPlace() {
         content: pin,
         title: place.name,
       });
+      marker.addListener("click", () => {
+        setIsRecommendOpen(true);
+        const index = recommendedPlaces.findIndex((item) => item.placeId === place.placeId);
+        if (index >= 0) {
+          window.setTimeout(() => {
+            recommendedCardRefs.current[index]?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+          }, 120);
+        }
+      });
       recommendMarkersRef.current.push(marker);
     });
   }, [map, recommendedPlaces]);
@@ -198,7 +212,7 @@ export default function AddPlace() {
         border: 3px solid white;
         border-radius: 999px;
         box-shadow: 0 6px 14px rgba(37, 99, 235, 0.3);
-      "></div>
+      " class="current-location-pulse"></div>
     `;
     if (currentLocationMarkerRef.current) {
       currentLocationMarkerRef.current.position = {
@@ -216,6 +230,12 @@ export default function AddPlace() {
       title: "現在地",
     });
   }, [map, currentLocation]);
+
+  const handleRecenter = () => {
+    if (!map || !currentLocation) return;
+    map.panTo({ lat: currentLocation.lat, lng: currentLocation.lng });
+    map.setZoom(15);
+  };
 
   const createPlaceMutation = trpc.place.create.useMutation();
 
@@ -522,6 +542,17 @@ export default function AddPlace() {
             initialCenter={{ lat: 35.6812, lng: 139.7671 }}
             initialZoom={12}
           />
+
+          {currentLocation && (
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute right-3 top-3 h-10 w-10 rounded-full shadow-lg bg-card"
+              onClick={handleRecenter}
+            >
+              <Navigation className="w-4 h-4" />
+            </Button>
+          )}
 
           {/* Search Results Button */}
           {searchResults.length > 0 && !isResultsOpen && (
@@ -1078,10 +1109,15 @@ function RecommendedSheet({
             </div>
           </div>
 
-          <div className="mt-4 space-y-4 max-h-[52vh] overflow-y-auto pr-1">
-            {recommendedPlaces.map((place) => (
+        <div className="mt-4 space-y-4 max-h-[52vh] overflow-y-auto pr-1">
+          {recommendedPlaces.map((place, index) => (
+            <div
+              key={place.placeId}
+              ref={(element) => {
+                recommendedCardRefs.current[index] = element;
+              }}
+            >
               <RecommendedPlaceCard
-                key={place.placeId}
                 place={place}
                 currentLocation={currentLocation}
                 savedPlaceIds={savedPlaceIds}
@@ -1091,8 +1127,9 @@ function RecommendedSheet({
                 sceneTokens={sceneTokens}
                 variant="stack"
               />
-            ))}
-          </div>
+            </div>
+          ))}
+        </div>
         </div>
       </div>
     </div>
